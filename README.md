@@ -1,6 +1,5 @@
-<<<<<<< HEAD
 # Local-Messenger
-=======
+---
 # 🌊 ВОЛНА — Настольный мессенджер
 
 Современный, легковесный и визуально выразительный десктопный клиент мессенджера на стеке **Python + pywebview + HTML5/CSS3/JS**, упакованный в футуристичный неоновый интерфейс.
@@ -37,6 +36,7 @@
 │   ├── downloads/              # Папка для скачивания принятых файлов
 │   └── cursors/                # Папка для кастомных курсоров (опционально)
 └── README.md
+```text
 🛠️ Установка и запуск
 1. Требования
 Python 3.10+
@@ -63,6 +63,3 @@ Bash
 pip install pyinstaller
 pyinstaller --noconfirm --onedir --windowed --add-data "web;web" --icon "web/icon.ico" main.py
 Собранная программа будет находиться в каталоге dist/main/.
->>>>>>> b48712a (upload)
-#   L o c a l - M e s s e n g e r  
- 
