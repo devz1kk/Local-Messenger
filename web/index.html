@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ВОЛНА — Мессенджер</title>
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@500;700;800&family=Unbounded:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg0:#06090f; --bg1:#0b111e; --panel:#0e1526; --panel2:#131c31; --panel3:#18243e;
+  --line:rgba(150,185,255,.09); --line2:rgba(150,185,255,.16);
+  --ink:#eef4fc; --mut:#8d9bb5; --dim:#57637d;
+  --acc:#35e0c8; --acc2:#4dc6ff; --coral:#ff6f61; --amber:#ffb454;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;border-radius:12px}
+body{
+  font-family:'Inter', 'Plus Jakarta Sans', -apple-system, sans-serif;
+  color:var(--ink); background:var(--bg0);
+  -webkit-font-smoothing:antialiased; user-select:none;
+  border:1px solid var(--line2);
+}
+button{font-family:inherit;color:inherit;background:none;border:none}
+input,textarea{font-family:inherit;color:inherit}
+
+/* Скрываем стандартный системный скроллбар */
+.msgs::-webkit-scrollbar{width:0;height:0;display:none}
+.msgs{scrollbar-width:none;-ms-overflow-style:none}
+
+/* 8 нативных зон растягивания окна во все стороны */
+.res-handle{position:fixed;z-index:99999}
+.res-n{top:0;left:10px;right:10px;height:6px;cursor:n-resize}
+.res-s{bottom:0;left:10px;right:10px;height:6px;cursor:s-resize}
+.res-e{top:10px;bottom:10px;right:0;width:6px;cursor:e-resize}
+.res-w{top:10px;bottom:10px;left:0;width:6px;cursor:w-resize}
+.res-nw{top:0;left:0;width:12px;height:12px;cursor:nw-resize}
+.res-ne{top:0;right:0;width:12px;height:12px;cursor:ne-resize}
+.res-sw{bottom:0;left:0;width:12px;height:12px;cursor:sw-resize}
+.res-se{bottom:0;right:0;width:12px;height:12px;cursor:se-resize}
+
+#bgfx{position:fixed;inset:0;z-index:0;opacity:.85}
+.glow{position:fixed;border-radius:50%;filter:blur(120px);z-index:0;pointer-events:none}
+.g1{width:520px;height:520px;left:-140px;top:-160px;background:radial-gradient(circle,rgba(53,224,200,.14),transparent 70%);animation:drift 26s ease-in-out infinite alternate}
+.g2{width:640px;height:640px;right:-200px;bottom:-240px;background:radial-gradient(circle,rgba(255,111,97,.11),transparent 70%);animation:drift 32s ease-in-out infinite alternate-reverse}
+@keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(60px,50px) scale(1.1)}}
+
+.app{position:relative;z-index:2;display:flex;height:100vh;flex-direction:column}
+
+/* Шапка с обычным курсором */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;padding:12px 20px;
+  background:rgba(10,15,26,.92);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:12px}
+.brand h1{
+  font-family:'Unbounded';font-weight:900;font-size:19px;letter-spacing:.05em;
+  background:linear-gradient(90deg,#f0fdfa,var(--acc) 55%,var(--acc2));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.conn-status{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono';font-size:11px;color:var(--mut)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--coral);transition:.3s}
+.dot.online{background:var(--acc);box-shadow:0 0 10px var(--acc)}
+
+.topbar-right{display:flex;align-items:center;gap:16px}
+.user-block{display:flex;align-items:center;gap:10px}
+.nick-label{font-size:13px;color:var(--mut);font-weight:600}
+.nick-input{
+  background:var(--panel2);border:1px solid var(--line2);border-radius:10px;
+  padding:5px 12px;font-size:13.5px;font-weight:700;color:var(--acc);outline:none;transition:.25s;
+}
+.nick-input:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(53,224,200,.15)}
+
+.win-ctrls{display:flex;align-items:center;gap:6px;border-left:1px solid var(--line2);padding-left:14px}
+.wbtn{
+  width:32px;height:32px;border-radius:9px;display:grid;place-items:center;
+  color:var(--mut);font-size:14px;transition:.2s;background:var(--panel);
+}
+.wbtn:hover{color:#fff;background:var(--panel3)}
+.wbtn.close:hover{background:var(--coral);color:#fff}
+
+/* Область чата с кастомным ползунком */
+.chat-viewport{
+  flex:1;position:relative;display:flex;overflow:hidden;
+}
+.msgs{
+  flex:1;overflow-y:auto;padding:24px 28px 24px 24px;display:flex;flex-direction:column;gap:12px;
+  position:relative;scroll-behavior:auto;
+}
+
+/* Кастомная интерактивная дорожка и ползунок */
+.scroll-track{
+  position:absolute;top:10px;bottom:10px;right:6px;width:10px;
+  background:rgba(150,185,255,.04);border-radius:99px;
+  display:flex;justify-content:center;z-index:50;transition:opacity .2s, background .2s;
+  opacity:0.35;cursor:pointer;
+}
+.scroll-track:hover, .scroll-track.dragging{
+  opacity:1;background:rgba(150,185,255,.09);
+}
+.scroll-thumb{
+  position:absolute;width:8px;min-height:36px;border-radius:99px;
+  background:linear-gradient(180deg,var(--acc),var(--acc2));
+  box-shadow:0 0 10px rgba(53,224,200,.35);cursor:grab;transition:width .15s, box-shadow .15s;
+  display:flex;align-items:center;justify-content:center;
+}
+.scroll-thumb:active, .scroll-track.dragging .scroll-thumb{
+  cursor:grabbing;width:10px;box-shadow:0 0 16px rgba(53,224,200,.7);
+}
+.scroll-thumb-grip{
+  width:3px;height:12px;border-radius:99px;background:rgba(5,25,35,.6);
+}
+
+/* Кнопка быстрого перехода в самый низ */
+.scroll-bottom-btn{
+  position:absolute;right:26px;bottom:16px;width:40px;height:40px;border-radius:50%;
+  background:rgba(14,21,38,.92);border:1px solid var(--line2);color:var(--acc);
+  box-shadow:0 8px 20px rgba(0,0,0,.5);display:grid;place-items:center;
+  cursor:pointer;z-index:45;backdrop-filter:blur(10px);transition:.25s;
+  opacity:0;pointer-events:none;transform:translateY(10px) scale(.9);
+}
+.scroll-bottom-btn.visible{
+  opacity:1;pointer-events:auto;transform:translateY(0) scale(1);
+}
+.scroll-bottom-btn:hover{
+  background:var(--panel3);color:#fff;box-shadow:0 0 14px rgba(53,224,200,.4);transform:translateY(-2px);
+}
+
+/* Сообщения */
+.msg-wrap{
+  position:relative;display:flex;flex-direction:column;max-width:min(680px,80%);
+  animation:msgIn .2s cubic-bezier(.2,.9,.3,1.2);
+}
+.msg-wrap.me{align-self:flex-end;align-items:flex-end}
+.msg-wrap.them{align-self:flex-start;align-items:flex-start}
+@keyframes msgIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+
+.bubble{
+  padding:10px 16px;font-size:14.5px;line-height:1.5;position:relative;word-break:break-word;
+  user-select:text;
+}
+.msg-wrap.them .bubble{
+  background:linear-gradient(160deg,var(--panel2),#101728);border:1px solid var(--line);
+  border-radius:18px 18px 18px 4px;color:var(--ink);
+}
+.msg-wrap.me .bubble{
+  background:linear-gradient(145deg, #0d3830 0%, #0e2b3c 100%);
+  border:1px solid rgba(53,224,200,.32);
+  color:#ebf8f6;
+  border-radius:18px 18px 4px 18px;
+  box-shadow:0 4px 18px rgba(0,0,0,.4);
+  font-weight:500;
+}
+.sender-name{font-size:12px;font-weight:800;margin-bottom:4px;color:var(--acc2)}
+.meta-time{font-family:'JetBrains Mono';font-size:10px;opacity:.7;margin-top:6px;float:right;margin-left:14px}
+.msg-wrap.me .meta-time{color:rgba(180,240,230,.6)}
+
+/* Ссылки */
+.msg-wrap.them a{color:#3ce7d0 !important;text-decoration:underline;text-underline-offset:3px;font-weight:600}
+.msg-wrap.them a:hover{color:#7efce9 !important;text-shadow:0 0 8px rgba(60,231,208,.4)}
+.msg-wrap.me a{color:#4de2cb !important;text-decoration:underline;text-underline-offset:3px;font-weight:600}
+.msg-wrap.me a:hover{color:#95ffef !important;text-shadow:0 0 8px rgba(77,226,203,.4)}
+
+.linkcard{
+  display:flex;flex-direction:column;gap:3px;background:rgba(10,15,28,.6);
+  border-left:3px solid var(--acc);border-radius:8px;padding:8px 12px;margin-top:8px;
+  transition:.25s;
+}
+.linkcard:hover{background:rgba(150,185,255,.09);transform:translateX(2px)}
+.msg-wrap.me .linkcard{background:rgba(6,25,32,.5);border-left-color:var(--acc)}
+.link-title{font-weight:700;font-size:13px;color:var(--acc2)}
+.link-domain{font-family:'JetBrains Mono';font-size:10.5px;opacity:.7}
+.link-desc{font-size:12px;color:var(--mut);line-height:1.3}
+
+/* Медиа */
+.tg-media{
+  margin-top:4px;border-radius:14px;overflow:hidden;max-width:520px;width:fit-content;
+  position:relative;background:rgba(0,0,0,.25);border:1px solid var(--line2);
+  min-height:40px;
+}
+.tg-media img{
+  display:block;max-width:100%;max-height:540px;width:auto;height:auto;
+  object-fit:contain;border-radius:12px;transition:transform .2s;
+}
+.tg-media img:hover{transform:scale(1.015)}
+.tg-media video{display:block;max-width:100%;max-height:540px;border-radius:12px;outline:none}
+audio{margin-top:6px;width:280px;height:38px;border-radius:99px;outline:none;display:block}
+
+/* Файл */
+.file-card{
+  display:flex;flex-direction:column;gap:8px;background:rgba(10,16,29,.55);
+  border:1px solid var(--line2);padding:10px 14px;border-radius:14px;margin-top:6px;min-width:270px;
+}
+.msg-wrap.me .file-card{background:rgba(6,25,32,.5)}
+.file-row{display:flex;align-items:center;gap:10px}
+.file-icon{font-size:22px;flex:none}
+.file-name{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.file-acts{display:flex;gap:6px}
+.fbtn{
+  font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:6px;
+  background:rgba(150,185,255,.14);transition:.2s;
+}
+.fbtn:hover{background:var(--acc);color:#052b22}
+
+.pbar-wrap{height:4px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden;position:relative}
+.pbar-fill{height:100%;width:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:99px;animation:pbarPulse 1.4s ease-in-out infinite}
+@keyframes pbarPulse{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+/* Реакции */
+.racts{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.rpill{
+  display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2.5px 8px;
+  border-radius:99px;background:rgba(10,16,30,.65);border:1px solid var(--line2);transition:.2s;
+}
+.rpill:hover{transform:scale(1.1)}
+.rpill.mine{border-color:var(--acc);background:rgba(53,224,200,.14);box-shadow:0 0 8px rgba(53,224,200,.3)}
+
+.rx-hover-bar{
+  position:absolute;top:-36px;right:10px;display:none;align-items:center;gap:3px;
+  padding:3px 6px;border-radius:99px;background:rgba(15,22,38,.96);border:1px solid var(--line2);
+  box-shadow:0 8px 24px rgba(0,0,0,.6);z-index:20;backdrop-filter:blur(10px);
+}
+.msg-wrap:hover .rx-hover-bar{display:flex}
+.rx-hover-bar button{font-size:15px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;transition:.15s}
+.rx-hover-bar button:hover{background:var(--panel3);transform:scale(1.3) translateY(-2px)}
+
+/* Композер */
+.composer-wrap{padding:14px 24px 20px;background:rgba(6,9,15,.75);backdrop-filter:blur(14px)}
+.composer{
+  display:flex;align-items:center;gap:10px;background:rgba(14,21,37,.9);
+  border:1px solid var(--line2);border-radius:18px;padding:8px 14px;transition:.25s;
+}
+.composer:focus-within{border-color:rgba(53,224,200,.5);box-shadow:0 0 0 3px rgba(53,224,200,.12)}
+#mtext{flex:1;background:none;border:none;outline:none;font-size:14.5px;color:var(--ink);resize:none;max-height:100px}
+.cbtn{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:var(--mut);transition:.2s;flex:none}
+.cbtn:hover{color:var(--ink);background:var(--panel3);transform:translateY(-1px)}
+.send-btn{
+  width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,var(--acc),var(--acc2));
+  color:#04231d;display:grid;place-items:center;font-weight:bold;transition:.25s;flex:none;
+}
+.send-btn:hover{transform:scale(1.05);box-shadow:0 6px 18px rgba(53,224,200,.35)}
+
+/* Drag and Drop */
+#dropOverlay{
+  position:fixed;inset:0;background:rgba(6,9,15,.88);backdrop-filter:blur(16px);
+  z-index:999;display:none;place-items:center;pointer-events:none;
+  border:3px dashed var(--acc);margin:12px;border-radius:24px;
+}
+#dropOverlay.active{display:grid}
+.drop-card{text-align:center;color:var(--ink)}
+.drop-card svg{color:var(--acc);margin-bottom:12px;animation:bounce 1s infinite alternate}
+.drop-card h3{font-family:'Unbounded';font-size:22px;margin-bottom:6px;color:#fff}
+.drop-card p{font-size:14px;color:var(--mut)}
+@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-10px)}}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translate(-50%,80px);z-index:200;
+  background:rgba(16,24,42,.96);border:1px solid var(--line2);padding:10px 22px;border-radius:99px;
+  font-size:13px;font-weight:600;box-shadow:0 12px 30px rgba(0,0,0,.6);transition:.3s;
+}
+#toast.show{transform:translate(-50%,0)}
+</style>
+
+<!-- Стили кастомных курсоров (генерируются динамически) -->
+<style id="custom-cursors-style"></style>
+</head>
+<body>
+
+<!-- 8 зон растягивания окна во все стороны -->
+<div class="res-handle res-n"  onmousedown="startWindowResize('n', event)"></div>
+<div class="res-handle res-s"  onmousedown="startWindowResize('s', event)"></div>
+<div class="res-handle res-e"  onmousedown="startWindowResize('e', event)"></div>
+<div class="res-handle res-w"  onmousedown="startWindowResize('w', event)"></div>
+<div class="res-handle res-nw" onmousedown="startWindowResize('nw', event)"></div>
+<div class="res-handle res-ne" onmousedown="startWindowResize('ne', event)"></div>
+<div class="res-handle res-sw" onmousedown="startWindowResize('sw', event)"></div>
+<div class="res-handle res-se" onmousedown="startWindowResize('se', event)"></div>
+
+<canvas id="bgfx"></canvas>
+<div class="glow g1"></div><div class="glow g2"></div>
+
+<div id="dropOverlay">
+  <div class="drop-card">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <h3>Перетащите файлы сюда</h3>
+    <p>Мгновенная отправка картинок, видео и документов</p>
+  </div>
+</div>
+
+<div class="app">
+  <header class="topbar" onmousedown="onTopBarMouseDown(event)">
+    <div class="brand">
+      <h1>ВОЛНА</h1>
+      <div class="conn-status">
+        <span class="dot" id="connDot"></span>
+        <span id="connTxt">Поиск сервера...</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="user-block">
+        <span class="nick-label">Никнейм:</span>
+        <input type="text" id="nickInput" class="nick-input" maxlength="24">
+      </div>
+      <div class="win-ctrls">
+        <button class="wbtn" onclick="callPy('py_minimize_window')" title="Свернуть">—</button>
+        <button class="wbtn close" onclick="callPy('py_hide_window')" title="Скрыть в трей">✕</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Оболочка с чатом, ползунком и кнопкой спуска -->
+  <div class="chat-viewport">
+    <main class="msgs" id="msgsBox"></main>
+
+    <!-- Интерактивный ползунок -->
+    <div class="scroll-track" id="scrollTrack">
+      <div class="scroll-thumb" id="scrollThumb">
+        <div class="scroll-thumb-grip"></div>
+      </div>
+    </div>
+
+    <!-- Кнопка прокрутки в самый низ -->
+    <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollToBottomSmooth()" title="Вниз к сообщениям">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+    </button>
+  </div>
+
+  <div class="composer-wrap">
+    <div class="composer">
+      <button class="cbtn" id="attachBtn" title="Прикрепить файл">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <textarea id="mtext" rows="1" placeholder="Напишите сообщение или перетащите файл... (Enter для отправки)"></textarea>
+      <button class="send-btn" id="sendBtn" title="Отправить">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 12 21 3l-4.5 18-5.3-7.2zM21 3 11.2 13.8"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let myNickname = "User";
+const messagesMap = new Map();
+const localReadyFiles = new Map();
+const msgsBox = document.getElementById('msgsBox');
+const scrollTrack = document.getElementById('scrollTrack');
+const scrollThumb = document.getElementById('scrollThumb');
+const scrollBottomBtn = document.getElementById('scrollBottomBtn');
+
+let isInitialLoadingLock = true;
+let isDraggingSlider = false;
+let sliderDragStartY = 0;
+let sliderStartTop = 0;
+
+function callPy(funcName, ...args) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api[funcName]) {
+    return window.pywebview.api[funcName](...args);
+  }
+  return Promise.resolve(null);
+}
+
+// --- Плавное перемещение и ресайз окна (60 FPS) ---
+let isWindowMoving = false;
+let moveStartX = 0, moveStartY = 0;
+let winStartX = 0, winStartY = 0;
+
+let isWindowResizing = false;
+let resizeDir = '';
+let resStartX = 0, resStartY = 0;
+let resWinX = 0, resWinY = 0;
+let resWinW = 0, resWinH = 0;
+
+let rafPending = false;
+let targetX = 0, targetY = 0, targetW = 0, targetH = 0;
+
+function onTopBarMouseDown(e) {
+  if (e.button !== 0 || e.target.closest('button, input, textarea, a, .wbtn, .nick-input, .win-ctrls')) return;
+  isWindowMoving = true;
+  moveStartX = e.screenX;
+  moveStartY = e.screenY;
+  callPy('py_get_window_bounds').then(b => {
+    if (b) { winStartX = b.x; winStartY = b.y; }
+  });
+}
+
+function startWindowResize(dir, e) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  isWindowResizing = true;
+  resizeDir = dir;
+  resStartX = e.screenX;
+  resStartY = e.screenY;
+  callPy('py_get_window_bounds').then(b => {
+    if (b) {
+      resWinX = b.x; resWinY = b.y;
+      resWinW = b.w; resWinH = b.h;
+    }
+  });
+}
+
+window.addEventListener('mousemove', (e) => {
+  // Перемещение окна
+  if (isWindowMoving) {
+    const dx = e.screenX - moveStartX;
+    const dy = e.screenY - moveStartY;
+    targetX = winStartX + dx;
+    targetY = winStartY + dy;
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(() => {
+        callPy('py_move_window', targetX, targetY);
+        rafPending = false;
+      });
+    }
+  } 
+  // Растягивание окна
+  else if (isWindowResizing) {
+    const dx = e.screenX - resStartX;
+    const dy = e.screenY - resStartY;
+    let newX = resWinX, newY = resWinY;
+    let newW = resWinW, newH = resWinH;
+    const minW = 680, minH = 520;
+
+    if (resizeDir.includes('e')) newW = Math.max(minW, resWinW + dx);
+    if (resizeDir.includes('s')) newH = Math.max(minH, resWinH + dy);
+    if (resizeDir.includes('w')) {
+      const propW = resWinW - dx;
+      if (propW >= minW) { newW = propW; newX = resWinX + dx; }
+    }
+    if (resizeDir.includes('n')) {
+      const propH = resWinH - dy;
+      if (propH >= minH) { newH = propH; newY = resWinY + dy; }
+    }
+
+    targetX = newX; targetY = newY; targetW = newW; targetH = newH;
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(() => {
+        callPy('py_resize_window', targetX, targetY, targetW, targetH);
+        rafPending = false;
+      });
+    }
+  }
+  // Перемещение ползунка чата
+  else if (isDraggingSlider) {
+    e.preventDefault();
+    const trackRect = scrollTrack.getBoundingClientRect();
+    const trackHeight = trackRect.height;
+    const thumbHeight = scrollThumb.offsetHeight;
+    const maxThumbTop = Math.max(1, trackHeight - thumbHeight);
+    
+    const deltaY = e.clientY - sliderDragStartY;
+    let newThumbTop = Math.min(Math.max(0, sliderStartTop + deltaY), maxThumbTop);
+    
+    const scrollRatio = newThumbTop / maxThumbTop;
+    const maxScroll = msgsBox.scrollHeight - msgsBox.clientHeight;
+    msgsBox.scrollTop = scrollRatio * maxScroll;
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  isWindowMoving = false;
+  isWindowResizing = false;
+  if (isDraggingSlider) {
+    isDraggingSlider = false;
+    scrollTrack.classList.remove('dragging');
+  }
+});
+
+// --- Логика работы ползунка прокрутки ---
+function updateScrollSlider() {
+  const scrollHeight = msgsBox.scrollHeight;
+  const clientHeight = msgsBox.clientHeight;
+  const scrollTop = msgsBox.scrollTop;
+
+  if (scrollHeight <= clientHeight + 10) {
+    scrollTrack.style.display = 'none';
+    scrollBottomBtn.classList.remove('visible');
+    return;
+  }
+  
+  scrollTrack.style.display = 'flex';
+  const trackHeight = scrollTrack.clientHeight;
+
+  // Динамический расчёт высоты ползунка (мин 36px)
+  let thumbHeight = Math.max(36, (clientHeight / scrollHeight) * trackHeight);
+  scrollThumb.style.height = `${thumbHeight}px`;
+
+  const maxThumbTop = trackHeight - thumbHeight;
+  const maxScroll = scrollHeight - clientHeight;
+  const thumbTop = maxScroll > 0 ? (scrollTop / maxScroll) * maxThumbTop : 0;
+  
+  if (!isDraggingSlider) {
+    scrollThumb.style.top = `${thumbTop}px`;
+  }
+
+  // Показывать/прятать кнопку спуска вниз
+  if (maxScroll - scrollTop > 160) {
+    scrollBottomBtn.classList.add('visible');
+  } else {
+    scrollBottomBtn.classList.remove('visible');
+  }
+}
+
+// Захват ползунка мышью
+scrollThumb.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  e.stopPropagation();
+  e.preventDefault();
+  isDraggingSlider = true;
+  isInitialLoadingLock = false;
+  sliderDragStartY = e.clientY;
+  sliderStartTop = parseFloat(scrollThumb.style.top) || 0;
+  scrollTrack.classList.add('dragging');
+});
+
+// Клик по дорожке для мгновенного перемещения
+scrollTrack.addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || e.target === scrollThumb || scrollThumb.contains(e.target)) return;
+  isInitialLoadingLock = false;
+  const trackRect = scrollTrack.getBoundingClientRect();
+  const clickY = e.clientY - trackRect.top;
+  const thumbHeight = scrollThumb.offsetHeight;
+  const maxThumbTop = trackRect.height - thumbHeight;
+  
+  const targetThumbTop = Math.min(Math.max(0, clickY - thumbHeight / 2), maxThumbTop);
+  const scrollRatio = targetThumbTop / maxThumbTop;
+  const maxScroll = msgsBox.scrollHeight - msgsBox.clientHeight;
+  
+  msgsBox.scrollTop = scrollRatio * maxScroll;
+  updateScrollSlider();
+});
+
+msgsBox.addEventListener('scroll', updateScrollSlider, { passive: true });
+
+function scrollToBottomSmooth() {
+  isInitialLoadingLock = false;
+  msgsBox.scrollTo({ top: msgsBox.scrollHeight, behavior: 'smooth' });
+}
+
+// --- Применение кастомных курсоров из web/cursors/ ---
+function applyCustomCursors(cursors) {
+  if (!cursors) return;
+  let css = '';
+  if (cursors.default) css += `html, body, .topbar, .brand { cursor: url('${cursors.default}'), auto !important; }\n`;
+  if (cursors.pointer) css += `button, a, .wbtn, .fbtn, .cbtn, .send-btn, .rpill, .scroll-bottom-btn, [onclick] { cursor: url('${cursors.pointer}'), pointer !important; }\n`;
+  if (cursors.text) css += `input, textarea { cursor: url('${cursors.text}'), text !important; }\n`;
+  if (cursors.res_n) css += `.res-n { cursor: url('${cursors.res_n}'), n-resize !important; }\n`;
+  if (cursors.res_s) css += `.res-s { cursor: url('${cursors.res_s}'), s-resize !important; }\n`;
+  if (cursors.res_e) css += `.res-e { cursor: url('${cursors.res_e}'), e-resize !important; }\n`;
+  if (cursors.res_w) css += `.res-w { cursor: url('${cursors.res_w}'), w-resize !important; }\n`;
+  if (cursors.res_nw) css += `.res-nw { cursor: url('${cursors.res_nw}'), nw-resize !important; }\n`;
+  if (cursors.res_ne) css += `.res-ne { cursor: url('${cursors.res_ne}'), ne-resize !important; }\n`;
+  if (cursors.res_sw) css += `.res-sw { cursor: url('${cursors.res_sw}'), sw-resize !important; }\n`;
+  if (cursors.res_se) css += `.res-se { cursor: url('${cursors.res_se}'), se-resize !important; }\n`;
+
+  document.getElementById('custom-cursors-style').textContent = css;
+}
+
+window.addEventListener('focus', () => callPy('py_set_window_focus', true));
+window.addEventListener('blur', () => callPy('py_set_window_focus', false));
+
+msgsBox.addEventListener('wheel', (e) => {
+  if (e.deltaY < 0) isInitialLoadingLock = false;
+}, { passive: true });
+
+msgsBox.addEventListener('touchmove', () => {
+  isInitialLoadingLock = false;
+}, { passive: true });
+
+window.addEventListener('pywebviewready', async () => {
+  const state = await callPy('py_frontend_ready');
+  if (state) {
+    myNickname = state.nickname;
+    document.getElementById('nickInput').value = myNickname;
+    window.js_set_connection_status(state.connected);
+    if (state.custom_cursors) {
+      applyCustomCursors(state.custom_cursors);
+    }
+    if (state.history && state.history.length > 0) {
+      window.js_load_history(state.history);
+    }
+  }
+});
+
+document.getElementById('nickInput').addEventListener('change', (e) => {
+  myNickname = e.target.value.trim() || "User";
+  callPy('py_set_nickname', myNickname);
+  window.js_show_toast("Ник сохранён");
+});
+
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+document.getElementById('attachBtn').addEventListener('click', () => callPy('py_select_and_send_file'));
+
+const mtext = document.getElementById('mtext');
+mtext.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+function sendMessage() {
+  const t = mtext.value.trim();
+  if (!t) return;
+  callPy('py_send_text', t);
+  mtext.value = '';
+}
+
+// --- Drag & Drop файлов ---
+const dropOverlay = document.getElementById('dropOverlay');
+let dragCounter = 0;
+
+window.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  dragCounter++;
+  dropOverlay.classList.add('active');
+});
+
+window.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  dragCounter--;
+  if (dragCounter <= 0) {
+    dragCounter = 0;
+    dropOverlay.classList.remove('active');
+  }
+});
+
+window.addEventListener('dragover', (e) => e.preventDefault());
+
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dragCounter = 0;
+  dropOverlay.classList.remove('active');
+  const files = e.dataTransfer.files;
+  if (files && files.length > 0) {
+    for (let i = 0; i < files.length; i++) {
+      uploadFile(files[i]);
+    }
+  }
+});
+
+function uploadFile(file) {
+  if (file.size > 150 * 1024 * 1024) {
+    window.js_show_toast(`Файл "${file.name}" превышает 150 МБ!`);
+    return;
+  }
+  window.js_show_toast(`Отправка "${file.name}"...`);
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const b64 = evt.target.result.split(',')[1];
+    callPy('py_upload_base64_file', file.name, b64);
+  };
+  reader.readAsDataURL(file);
+}
+
+// --- Функции вызова из Python ---
+window.js_set_connection_status = function(online) {
+  const dot = document.getElementById('connDot');
+  const txt = document.getElementById('connTxt');
+  dot.classList.toggle('online', online);
+  txt.textContent = online ? 'В сети' : 'Поиск сервера...';
+};
+
+window.js_show_toast = function(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+};
+
+window.js_load_history = function(history) {
+  msgsBox.innerHTML = '';
+  messagesMap.clear();
+  isInitialLoadingLock = true;
+
+  const fragment = document.createDocumentFragment();
+  history.forEach(m => fragment.appendChild(createMessageElement(m)));
+  msgsBox.appendChild(fragment);
+
+  pinToBottom();
+  setTimeout(pinToBottom, 150);
+  setTimeout(pinToBottom, 400);
+  setTimeout(pinToBottom, 1000);
+  setTimeout(() => { isInitialLoadingLock = false; }, 3500);
+};
+
+window.js_add_message = function(msg) {
+  const shouldScroll = isUserNearBottom() || msg.sender === myNickname;
+  const el = createMessageElement(msg);
+  msgsBox.appendChild(el);
+
+  if (shouldScroll) {
+    msgsBox.scrollTo({ top: msgsBox.scrollHeight, behavior: 'smooth' });
+  }
+  updateScrollSlider();
+};
+
+window.js_on_file_ready = function(fileId, filename, localPath, relUrl) {
+  localReadyFiles.set(fileId, { localPath, relUrl });
+  const fn = filename.toLowerCase();
+  const isMedia = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|mp3|wav|ogg)$/.test(fn);
+
+  if (isMedia) {
+    const mediaWrap = document.getElementById(`media-${fileId}`);
+    if (mediaWrap) mediaWrap.innerHTML = renderMediaElement(filename, relUrl, localPath);
+  } else {
+    const fileCard = document.getElementById(`fcard-${fileId}`);
+    if (fileCard) fileCard.innerHTML = renderDocCardContent(filename, localPath);
+  }
+  
+  if (isInitialLoadingLock || isUserNearBottom()) pinToBottom();
+  updateScrollSlider();
+};
+
+window.js_update_reactions = function(msgId, reactions) {
+  const m = messagesMap.get(msgId);
+  if (m) {
+    m.reactions = reactions;
+    const el = document.getElementById(`rx-${msgId}`);
+    if (el) renderReactionsHtml(el, msgId, reactions);
+  }
+  updateScrollSlider();
+};
+
+window.js_on_link_preview_ready = function(url, meta) {
+  document.querySelectorAll(`.linkcard[data-url="${CSS.escape(url)}"]`).forEach(card => {
+    card.querySelector('.link-title').textContent = meta.title;
+    card.querySelector('.link-domain').textContent = meta.domain;
+    card.querySelector('.link-desc').textContent = meta.desc;
+  });
+  if (isInitialLoadingLock || isUserNearBottom()) pinToBottom();
+  updateScrollSlider();
+};
+
+function createMessageElement(m) {
+  const msgId = m.id || m.file_id;
+  messagesMap.set(msgId, m);
+  m.reactions = m.reactions || {};
+
+  const isMe = (m.sender === myNickname);
+  const wrap = document.createElement('div');
+  wrap.className = `msg-wrap ${isMe ? 'me' : 'them'}`;
+  wrap.id = `msgwrap-${msgId}`;
+
+  let inner = '';
+
+  if (m.action === 'msg' || m.text) {
+    const urls = m.text.match(/(https?:\/\/[^\s]+)/g) || [];
+    let safeText = escapeHtml(m.text);
+
+    urls.forEach(u => {
+      safeText = safeText.replace(u, `<a href="#" onclick="callPy('py_open_file', '${escapeJs(u)}');return false;">${u}</a>`);
+      callPy('py_fetch_link_preview', u);
+    });
+
+    inner = `<span>${safeText}</span>`;
+    urls.forEach(u => {
+      inner += `
+        <div class="linkcard" data-url="${escapeHtml(u)}" onclick="callPy('py_open_file', '${escapeJs(u)}')">
+          <span class="link-title">Загрузка информации...</span>
+          <span class="link-domain">${u}</span>
+          <span class="link-desc">...</span>
+        </div>`;
+    });
+  } else if (m.action === 'file' || m.filename) {
+    const fileId = m.file_id || msgId;
+    const fileData = localReadyFiles.get(fileId);
+    const fn = m.filename.toLowerCase();
+    const isImg = /\.(jpg|jpeg|png|gif|webp|svg)$/.test(fn);
+    const isVid = /\.(mp4|webm|mov)$/.test(fn);
+    const isAud = /\.(mp3|wav|ogg)$/.test(fn);
+
+    if (isImg || isVid || isAud) {
+      inner += `<div class="tg-media" id="media-${fileId}">${fileData ? renderMediaElement(m.filename, fileData.relUrl, fileData.localPath) : '<div class="pbar-wrap" style="width:200px;height:4px;margin:8px 0"><div class="pbar-fill"></div></div>'}</div>`;
+    } else {
+      inner += `<div class="file-card" id="fcard-${fileId}">${renderDocCardContent(m.filename, fileData?.localPath)}</div>`;
+    }
+  }
+
+  wrap.innerHTML = `
+    <div class="rx-hover-bar">
+      <button onclick="sendReaction('${msgId}', '❤️')">❤️</button>
+      <button onclick="sendReaction('${msgId}', '🔥')">🔥</button>
+      <button onclick="sendReaction('${msgId}', '😂')">😂</button>
+      <button onclick="sendReaction('${msgId}', '✨')">✨</button>
+      <button onclick="sendReaction('${msgId}', '👍')">👍</button>
+      <button onclick="sendReaction('${msgId}', '🚀')">🚀</button>
+    </div>
+    <div class="bubble">
+      ${!isMe ? `<div class="sender-name">${escapeHtml(m.sender || 'Аноним')}</div>` : ''}
+      ${inner}
+      <span class="meta-time">${m.time || ''}</span>
+    </div>
+    <div class="racts" id="rx-${msgId}"></div>
+  `;
+
+  renderReactionsHtml(wrap.querySelector(`#rx-${msgId}`), msgId, m.reactions);
+  return wrap;
+}
+
+function renderMediaElement(filename, relUrl, localPath) {
+  const fn = filename.toLowerCase();
+  if (/\.(jpg|jpeg|png|gif|webp|svg)$/.test(fn)) {
+    return `<img src="${relUrl}" alt="${escapeHtml(filename)}" onload="onMediaLoaded()" onerror="onMediaLoaded()" onclick="callPy('py_open_file', '${escapeJs(localPath)}')" title="Кликните, чтобы открыть"/>`;
+  } else if (/\.(mp4|webm|mov)$/.test(fn)) {
+    return `<video controls src="${relUrl}" preload="metadata" onloadedmetadata="onMediaLoaded()"></video>`;
+  } else if (/\.(mp3|wav|ogg)$/.test(fn)) {
+    return `<audio controls src="${relUrl}" preload="metadata"></audio>`;
+  }
+  return '';
+}
+
+function renderDocCardContent(filename, localPath) {
+  if (localPath) {
+    return `
+      <div class="file-row">
+        <span class="file-icon">📄</span>
+        <span class="file-name" title="${escapeHtml(filename)}">${escapeHtml(filename)}</span>
+        <div class="file-acts">
+          <button class="fbtn" onclick="callPy('py_open_file', '${escapeJs(localPath)}')">▶ Открыть</button>
+          <button class="fbtn" onclick="callPy('py_open_folder', '${escapeJs(localPath)}')">📂 В папке</button>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="file-row">
+      <span class="file-icon">⏳</span>
+      <span class="file-name">${escapeHtml(filename)}</span>
+      <span style="font-size:11px;opacity:.7">Скачивание...</span>
+    </div>
+    <div class="pbar-wrap"><div class="pbar-fill"></div></div>
+  `;
+}
+
+function renderReactionsHtml(container, msgId, reactions) {
+  container.innerHTML = '';
+  if (!reactions) return;
+
+  Object.entries(reactions).forEach(([emoji, users]) => {
+    if (!users || users.length === 0) return;
+    const isMine = users.includes(myNickname);
+    const pill = document.createElement('span');
+    pill.className = `rpill ${isMine ? 'mine' : ''}`;
+    pill.title = users.join(', ');
+    pill.innerHTML = `${emoji} <b>${users.length}</b>`;
+    pill.onclick = () => sendReaction(msgId, emoji);
+    container.appendChild(pill);
+  });
+}
+
+function sendReaction(msgId, emoji) {
+  callPy('py_toggle_reaction', msgId, emoji);
+}
+
+function isUserNearBottom() {
+  return (msgsBox.scrollHeight - msgsBox.scrollTop - msgsBox.clientHeight) <= 160;
+}
+
+function pinToBottom() {
+  requestAnimationFrame(() => { 
+    msgsBox.scrollTop = msgsBox.scrollHeight;
+    updateScrollSlider();
+  });
+}
+
+function onMediaLoaded() {
+  if (isInitialLoadingLock || isUserNearBottom()) pinToBottom();
+  updateScrollSlider();
+}
+
+const resizeObserver = new ResizeObserver(() => {
+  if (isInitialLoadingLock || isUserNearBottom()) pinToBottom();
+  updateScrollSlider();
+});
+resizeObserver.observe(msgsBox);
+
+function escapeHtml(s) {
+  return (s || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeJs(s) {
+  return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+// --- Фоновая Canvas анимация ---
+const cv = document.getElementById('bgfx'), cx = cv.getContext('2d');
+let W, H, parts = [], T = 0;
+function resize() { W = cv.width = innerWidth; H = cv.height = innerHeight; updateScrollSlider(); }
+resize(); window.addEventListener('resize', resize);
+for (let i = 0; i < 50; i++) parts.push({ x: Math.random() * 2000, y: Math.random() * 1200, r: 0.8 + Math.random() * 1.8, sp: 0.2 + Math.random() * 0.4 });
+function anim() {
+  T += 0.008; cx.clearRect(0, 0, W, H);
+  for (let k = 0; k < 2; k++) {
+    cx.beginPath();
+    const base = H * (0.35 + k * 0.3);
+    for (let x = 0; x <= W; x += 8) {
+      const y = base + Math.sin(x * 0.003 + T * 1.5 + k) * 25 + Math.sin(x * 0.007 + T) * 10;
+      x === 0 ? cx.moveTo(x, y) : cx.lineTo(x, y);
+    }
+    cx.strokeStyle = k === 0 ? 'rgba(53,224,200,0.12)' : 'rgba(77,198,255,0.08)';
+    cx.lineWidth = 1.6; cx.stroke();
+  }
+  parts.forEach(p => {
+    p.y -= p.sp; if (p.y < -10) { p.y = H + 10; p.x = Math.random() * W; }
+    cx.beginPath(); cx.arc(p.x % W, p.y, p.r, 0, 7);
+    cx.fillStyle = 'rgba(53,224,200,0.25)'; cx.fill();
+  });
+  requestAnimationFrame(anim);
+}
+anim();
+</script>
+</body>
+</html>

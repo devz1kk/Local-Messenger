@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+client_config.json
+web/downloads/
+.venv/
+venv/
+dist/
+build/
+*.spec
