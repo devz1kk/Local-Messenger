@@ -6,4 +6,5 @@ web/downloads/
 venv/
 dist/
 build/
+downloads/
 *.spec
