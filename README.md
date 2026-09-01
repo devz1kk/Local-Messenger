@@ -58,6 +58,6 @@ TCP-пакеты: [4 байта Big-Endian: длина JSON] + [JSON Payload UTF
 📦 Сборка в автономный .exe (PyInstaller)
 Для сборки единого исполняемого файла для Windows:
 ```Bash
-pyinstaller --noconfirm --onedir --windowed --add-data "web;web" --icon "web/icon.ico" main.py
+pyinstaller --noconfirm --onefile --noconsole --add-data "web;web" --icon "web/icon.ico" --hidden-import "clr" --hidden-import "clr_loader" --hidden-import "pythonnet" --hidden-import "pystray._win32" --hidden-import "tkinter" --collect-all "webview" main.py
 ```
 Собранная программа будет находиться в каталоге dist/main/.

@@ -27,6 +27,7 @@ import tkinter as tk
 from tkinter import filedialog
 import urllib.parse
 import urllib.request
+import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -44,11 +45,17 @@ if sys.platform == "win32":
 PORT: int = 12345
 UDP_PORT: int = 12346
 
-BASE_DIR: Path = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent.resolve()
-WEB_DIR: Path = BASE_DIR / "web"
-DOWNLOADS_DIR: Path = WEB_DIR / "downloads"
+if getattr(sys, "frozen", False):
+    RESOURCE_DIR: Path = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    DATA_DIR: Path = Path(sys.executable).parent
+else:
+    RESOURCE_DIR: Path = Path(__file__).parent.resolve()
+    DATA_DIR: Path = RESOURCE_DIR
+
+WEB_DIR: Path = RESOURCE_DIR / "web"
+DOWNLOADS_DIR: Path = DATA_DIR / "downloads"
 CURSORS_DIR: Path = WEB_DIR / "cursors"
-CONFIG_FILE: Path = BASE_DIR / "client_config.json"
+CONFIG_FILE: Path = DATA_DIR / "client_config.json"
 ICON_PNG_PATH: Path = WEB_DIR / "icon.png"
 ICON_ICO_PATH: Path = WEB_DIR / "icon.ico"
 
@@ -78,7 +85,6 @@ def ensure_app_icons() -> Image.Image:
 APP_ICON_IMAGE = ensure_app_icons()
 
 
-# --- Неоновый движок уведомлений в правом нижнем углу ---
 class NeonToastEngine:
     def __init__(self) -> None:
         self._queue: queue.Queue[tuple[str, str, bool]] = queue.Queue()
@@ -220,7 +226,6 @@ main_window: webview.Window | None = None
 is_window_focused: bool = False
 cached_history: list[dict[str, Any]] = []
 
-# Размеры и сохраненные координаты окна
 WIN_WIDTH: int = 1100
 WIN_HEIGHT: int = 800
 saved_window_x: int = 100
@@ -453,11 +458,9 @@ class NetworkWorker(threading.Thread):
 worker = NetworkWorker(config.nickname)
 
 
-# --- Мост API между Python и JS ---
 class JsApi:
     def py_frontend_ready(self) -> dict[str, Any]:
         global saved_window_x, saved_window_y
-        # Рассчитываем координаты по центру экрана для первого открытия
         if sys.platform == "win32":
             user32 = ctypes.windll.user32
             sw = user32.GetSystemMetrics(0)
@@ -476,7 +479,6 @@ class JsApi:
             "custom_cursors": self.py_get_custom_cursors()
         }
 
-    # Сканирование папки web/cursors/
     def py_get_custom_cursors(self) -> dict[str, str]:
         cursors = {}
         if not CURSORS_DIR.exists():
@@ -534,7 +536,6 @@ class JsApi:
         global is_window_focused
         is_window_focused = False
         if main_window:
-            # Смещение за экран (сохраняет рендеринг активным)
             main_window.move(-15000, -15000)
 
     def py_minimize_window(self) -> None:
@@ -598,7 +599,19 @@ class JsApi:
             "emoji": emoji
         })
 
+    def py_open_link(self, url: str) -> None:
+        """Открытие веб-ссылки в браузере по умолчанию."""
+        target_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
+        try:
+            webbrowser.open(target_url, new=2)
+        except Exception as e:
+            run_js(f"window.js_show_toast('Не удалось открыть ссылку: {e}');")
+
     def py_open_file(self, filepath: str) -> None:
+        if filepath.startswith(("http://", "https://")):
+            self.py_open_link(filepath)
+            return
+
         path = os.path.abspath(filepath)
         if not os.path.exists(path):
             run_js("window.js_show_toast('Файл ещё загружается...');")
@@ -701,7 +714,6 @@ if __name__ == "__main__":
     api = JsApi()
     html_path = WEB_DIR / "index.html"
 
-    # Pre-warm: окно создается за экраном (x=-15000) для фоновой полной прогрузки
     main_window = webview.create_window(
         title="ВОЛНА — Мессенджер",
         url=str(html_path),
