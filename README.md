@@ -25,7 +25,7 @@
 ---
 
 ## 📁 Структура проекта
-
+```text
 ├── main.py                     # Основной код клиента (pywebview + TCP клиент + Tkinter Toast)
 ├── client_config.json          # Файл сохранения настроек пользователя (никнейм)
 ├── web/
@@ -35,20 +35,20 @@
 │   ├── downloads/              # Папка для скачивания принятых файлов
 │   └── cursors/                # Папка для кастомных курсоров (опционально)
 └── README.md
-
+```
 🛠️ Установка и запуск
 1. Требования
 Python 3.10+
 Операционная система: Windows 10/11, Linux или macOS.
 2. Установка зависимостей
-code
-Bash
+```Bash
 pip install pywebview pystray Pillow
+```
 Примечание для Linux: может потребоваться установка python3-tk и бэкенда WebKit (gir1.2-webkit2-4.0 или PyQt5 / PyQtWebEngine).
 3. Запуск
-code
-Bash
+```Bash
 python main.py
+```
 Приложение создаст необходимые директории, инициализирует иконки и запустится в системном трее.
 🔌 Сетевой протокол (TCP + UDP)
 Клиент использует надежный бинарный фрейминг:
@@ -57,8 +57,8 @@ TCP-пакеты: [4 байта Big-Endian: длина JSON] + [JSON Payload UTF
 Автореконнект: Автоматическое переподключение и восстановление истории при разрыве связи.
 📦 Сборка в автономный .exe (PyInstaller)
 Для сборки единого исполняемого файла для Windows:
-code
-Bash
+```Bash
 pip install pyinstaller
 pyinstaller --noconfirm --onedir --windowed --add-data "web;web" --icon "web/icon.ico" main.py
+```
 Собранная программа будет находиться в каталоге dist/main/.
