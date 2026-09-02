@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Unbounded:wght@800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg0: #040711;
+  --acc: #00f2fe;
+  --acc2: #4facfe;
+  --coral: #ff5e7e;
+  --line: rgba(0, 242, 254, 0.55);
+  --line2: rgba(140, 210, 255, 0.22);
+  --mut: #94a5c4;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'Inter', sans-serif;
+  user-select: none;
+}
+
+/* Окно полностью ограничено скругленными углами без внешних квадратов */
+.update-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: radial-gradient(ellipse at top, #091730 0%, var(--bg0) 100%);
+  border: 1.5px solid var(--acc);
+  border-radius: 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px 24px;
+  box-shadow: inset 0 0 25px rgba(0, 242, 254, 0.15);
+}
+
+/* Canvas строго внутри скругленного окна */
+#updateBgfx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 24px;
+}
+
+.glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(75px);
+  z-index: 1;
+  pointer-events: none;
+}
+.g1 {
+  width: 200px; height: 200px; left: -40px; top: -50px;
+  background: radial-gradient(circle, rgba(0,242,254,0.25), transparent 70%);
+  animation: drift1 14s ease-in-out infinite alternate;
+}
+.g2 {
+  width: 220px; height: 220px; right: -50px; bottom: -50px;
+  background: radial-gradient(circle, rgba(255,94,126,0.18), transparent 70%);
+  animation: drift2 16s ease-in-out infinite alternate-reverse;
+}
+@keyframes drift1 { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(30px, 20px) scale(1.15); } }
+@keyframes drift2 { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(-30px, -20px) scale(1.1); } }
+
+.content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+}
+
+h2 {
+  font-family: 'Unbounded', sans-serif;
+  font-weight: 900;
+  font-size: 15.5px;
+  letter-spacing: .06em;
+  background: linear-gradient(135deg, #ffffff 0%, var(--acc) 60%, var(--acc2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 20px rgba(0, 242, 254, 0.45);
+}
+
+.update-btns {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Кнопки-пилюли в стиле реакций (.rpill) */
+.rpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 8px 22px;
+  border-radius: 99px;
+  border: 1px solid var(--line2);
+  transition: all .25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  outline: none;
+}
+.rpill:hover {
+  transform: scale(1.06) translateY(-2px);
+}
+
+.btn-later {
+  background: rgba(12, 22, 38, 0.75);
+  color: var(--mut);
+}
+.btn-later:hover {
+  background: rgba(25, 42, 70, 0.9);
+  color: #fff;
+  border-color: rgba(140, 210, 255, 0.4);
+}
+
+.btn-apply {
+  border-color: var(--acc);
+  background: rgba(0, 242, 254, 0.22);
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.4);
+  color: #fff;
+}
+.btn-apply:hover {
+  background: rgba(0, 242, 254, 0.35);
+  box-shadow: 0 0 25px rgba(0, 242, 254, 0.65);
+}
+</style>
+</head>
+<body>
+
+<div class="update-container">
+  <canvas id="updateBgfx"></canvas>
+  <div class="glow g1"></div>
+  <div class="glow g2"></div>
+
+  <div class="content">
+    <h2>ВОЛНА • ОБНОВЛЕНИЕ ГОТОВО</h2>
+    <div class="update-btns">
+      <button class="rpill btn-apply" onclick="callPy('py_apply_update')">✨ Установить сейчас</button>
+      <button class="rpill btn-later" onclick="callPy('py_dismiss_update')">Позже</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function callPy(fn, ...args) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api[fn]) {
+    window.pywebview.api[fn](...args);
+  }
+}
+
+// Canvas-фон: 3 биоморфные волны и частицы строго внутри карточки
+const cv = document.getElementById('updateBgfx'), cx = cv.getContext('2d');
+let W, H, parts = [], T = 0;
+
+function resize() {
+  W = cv.width = window.innerWidth;
+  H = cv.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+for (let i = 0; i < 35; i++) {
+  parts.push({
+    x: Math.random() * window.innerWidth,
+    y: Math.random() * window.innerHeight,
+    r: 1.0 + Math.random() * 1.8,
+    sp: 0.3 + Math.random() * 0.5,
+    alpha: 0.2 + Math.random() * 0.6
+  });
+}
+
+function anim() {
+  T += 0.012;
+  cx.clearRect(0, 0, W, H);
+
+  for (let k = 0; k < 3; k++) {
+    cx.beginPath();
+    const base = H * (0.35 + k * 0.22);
+    cx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 10) {
+      const y = base + Math.sin(x * 0.003 + T * 1.2 + k * 1.5) * (18 + k * 5) + Math.cos(x * 0.006 - T * 0.8) * 8;
+      cx.lineTo(x, y);
+    }
+    cx.lineTo(W, H);
+    cx.fillStyle = k === 0 ? 'rgba(0, 242, 254, 0.05)' : (k === 1 ? 'rgba(79, 172, 254, 0.04)' : 'rgba(255, 94, 126, 0.02)');
+    cx.fill();
+    cx.strokeStyle = k === 0 ? 'rgba(0, 242, 254, 0.28)' : 'rgba(79, 172, 254, 0.18)';
+    cx.lineWidth = 1.2;
+    cx.stroke();
+  }
+
+  for (let p of parts) {
+    p.y -= p.sp;
+    if (p.y < -10) { p.y = H + 10; p.x = Math.random() * W; }
+    cx.beginPath();
+    cx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    cx.fillStyle = `rgba(0, 242, 254, ${p.alpha})`;
+    cx.shadowBlur = 8;
+    cx.shadowColor = '#00f2fe';
+    cx.fill();
+    cx.shadowBlur = 0;
+  }
+  requestAnimationFrame(anim);
+}
+anim();
+</script>
+</body>
+</html>

@@ -1,24 +1,18 @@
 """
-Клиент мессенджера 'ВОЛНА' на базе pywebview + Pystray.
-- Мгновенное открытие из трея за 0 мс (фоновый pre-warm рендеринг)
-- Растягивание окна во все 8 направлений и перемещение за шапку
-- Поддержка кастомных курсоров из папки web/cursors/
-- Иконка в панели задач, неразрывный TCP-клиент и неоновые уведомления
-- Корректное скрытие кнопки из панели задач при работе в фоновом режиме (в трее)
+Клиент мессенджера 'ВОЛНА' на базе pywebview.
+Аппаратная маска скругления Win32 для toast.html и update.html без черных рамок.
 """
 
 from __future__ import annotations
 
 import base64
 import ctypes
-import html
-from html.parser import HTMLParser
+import hashlib
 import json
 import os
-import queue
 import random
-import re
 import socket
+import ssl
 import struct
 import subprocess
 import sys
@@ -26,7 +20,6 @@ import threading
 import time
 import tkinter as tk
 from tkinter import filedialog
-import urllib.parse
 import urllib.request
 import webbrowser
 from dataclasses import dataclass, field
@@ -37,9 +30,17 @@ import pystray
 from PIL import Image, ImageDraw
 import webview
 
-# Константы Win32 ShowWindow
+# ==========================================
+# КОНФИГУРАЦИЯ И СИСТЕМНЫЕ ВЫЗОВЫ
+# ==========================================
+DEBUG: bool = False
 SW_HIDE: int = 0
 SW_RESTORE: int = 9
+SW_SHOWNOACTIVATE: int = 4
+
+HWND_TOPMOST = -1
+SWP_NOACTIVATE = 0x0010
+SWP_SHOWWINDOW = 0x0040
 
 if sys.platform == "win32":
     try:
@@ -49,6 +50,7 @@ if sys.platform == "win32":
 
 PORT: int = 12345
 UDP_PORT: int = 12346
+GITHUB_API_EXE_URL: str = "https://api.github.com/repos/devz1kk/Local-Messenger/contents/dist/main.exe"
 
 if getattr(sys, "frozen", False):
     RESOURCE_DIR: Path = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
@@ -63,11 +65,229 @@ CURSORS_DIR: Path = WEB_DIR / "cursors"
 CONFIG_FILE: Path = DATA_DIR / "client_config.json"
 ICON_PNG_PATH: Path = WEB_DIR / "icon.png"
 ICON_ICO_PATH: Path = WEB_DIR / "icon.ico"
+PENDING_UPDATE_FILE: Path = DATA_DIR / "update_pending.exe"
 
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 CURSORS_DIR.mkdir(parents=True, exist_ok=True)
 WEB_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def calculate_git_blob_sha(filepath: Path) -> str:
+    if not filepath.is_file():
+        return ""
+    try:
+        h = hashlib.sha1()
+        size = filepath.stat().st_size
+        h.update(f"blob {size}\0".encode("utf-8"))
+        with open(filepath, "rb") as f:
+            while chunk := f.read(65536):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
+
+
+def apply_update_and_restart(new_exe_path: Path) -> None:
+    current_exe = Path(sys.executable)
+    if not getattr(sys, "frozen", False):
+        return
+
+    pid = os.getpid()
+    updater_bat = DATA_DIR / "_apply_update.bat"
+    bat_script = f"""@echo off
+cd /d "%~dp0"
+:wait_loop
+tasklist /fi "PID eq {pid}" | findstr "{pid}" >nul
+if not errorlevel 1 (
+    timeout /t 1 /nobreak >nul
+    goto wait_loop
+)
+move /y "{new_exe_path.name}" "{current_exe.name}" >nul
+start "" "{current_exe.name}"
+del "%~f0"
+"""
+    try:
+        with open(updater_bat, "w", encoding="utf-8") as f:
+            f.write(bat_script)
+        subprocess.Popen(
+            ["cmd.exe", "/c", str(updater_bat)],
+            creationflags=0x08000000 if sys.platform == "win32" else 0,
+            close_fds=True
+        )
+        os._exit(0)
+    except Exception:
+        pass
+
+
+def check_and_apply_pending_update() -> bool:
+    if PENDING_UPDATE_FILE.exists() and getattr(sys, "frozen", False):
+        apply_update_and_restart(PENDING_UPDATE_FILE)
+        return True
+    return False
+
+
+# ==========================================
+# УПРАВЛЕНИЕ ОКНАМИ И МАСКАМИ СКРУГЛЕНИЯ
+# ==========================================
+
+TOAST_W, TOAST_H = 340, 110
+MODAL_W, MODAL_H = 430, 160
+
+main_window: webview.Window | None = None
+toast_window: webview.Window | None = None
+update_window: webview.Window | None = None
+
+toast_timer: threading.Timer | None = None
+
+
+def apply_round_mask(hwnd: int, width: int, height: int, radius: int = 24) -> None:
+    """Аппаратно отсекает прямоугольные края окна Windows через GDI Rgn."""
+    if sys.platform != "win32" or not hwnd:
+        return
+    rgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, radius, radius)
+    ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True)
+
+
+def get_screen_resolution() -> tuple[int, int]:
+    if sys.platform == "win32":
+        return ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
+    return 1920, 1080
+
+
+def set_taskbar_visibility(visible: bool) -> None:
+    if sys.platform != "win32":
+        return
+    hwnd = ctypes.windll.user32.FindWindowW(None, "ВОЛНА — Мессенджер")
+    if hwnd and ctypes.windll.user32.IsWindow(hwnd):
+        ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE if visible else SW_HIDE)
+
+
+def show_toast_window(msg_payload: dict[str, Any]) -> None:
+    global toast_timer
+    if not toast_window:
+        return
+
+    if toast_timer:
+        toast_timer.cancel()
+
+    sw, sh = get_screen_resolution()
+    target_x = sw - TOAST_W - 20
+    target_y = sh - TOAST_H - 50
+
+    toast_window.move(target_x, target_y)
+    toast_window.evaluate_js(f"setToastPayload({json.dumps(msg_payload)});")
+    toast_window.show()
+
+    if sys.platform == "win32":
+        hwnd = ctypes.windll.user32.FindWindowW(None, "VolnaToastWidget")
+        if hwnd:
+            apply_round_mask(hwnd, TOAST_W, TOAST_H, radius=22)
+            ctypes.windll.user32.SetWindowPos(hwnd, HWND_TOPMOST, target_x, target_y, TOAST_W, TOAST_H, SWP_NOACTIVATE | SWP_SHOWWINDOW)
+
+    toast_timer = threading.Timer(5.5, hide_toast_window)
+    toast_timer.daemon = True
+    toast_timer.start()
+
+
+def hide_toast_window() -> None:
+    if toast_window:
+        toast_window.hide()
+
+
+def show_update_window() -> None:
+    if not update_window:
+        return
+    sw, sh = get_screen_resolution()
+    target_x = (sw - MODAL_W) // 2
+    target_y = (sh - MODAL_H) // 2
+    update_window.move(target_x, target_y)
+    update_window.show()
+
+    if sys.platform == "win32":
+        hwnd = ctypes.windll.user32.FindWindowW(None, "VolnaUpdateModal")
+        if hwnd:
+            apply_round_mask(hwnd, MODAL_W, MODAL_H, radius=26)
+            ctypes.windll.user32.SetWindowPos(hwnd, HWND_TOPMOST, target_x, target_y, MODAL_W, MODAL_H, SWP_SHOWWINDOW)
+            ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
+
+
+def hide_update_window() -> None:
+    if update_window:
+        update_window.hide()
+
+
+# ==========================================
+# JS-API
+# ==========================================
+
+class ToastJsApi:
+    def py_toast_ready(self) -> None:
+        pass
+
+    def py_on_toast_clicked(self) -> None:
+        hide_toast_window()
+        restore_window()
+
+    def py_on_toast_close(self) -> None:
+        hide_toast_window()
+
+
+class UpdateJsApi:
+    def py_apply_update(self) -> None:
+        hide_update_window()
+        apply_update_and_restart(PENDING_UPDATE_FILE)
+
+    def py_dismiss_update(self) -> None:
+        hide_update_window()
+
+
+# ==========================================
+# ПОТОК АВТООБНОВЛЕНИЯ GITHUB
+# ==========================================
+
+class AutoUpdater(threading.Thread):
+    def __init__(self) -> None:
+        super().__init__(daemon=True)
+
+    def run(self) -> None:
+        time.sleep(3.5)
+        try:
+            current_exe = Path(sys.executable) if getattr(sys, "frozen", False) else (DATA_DIR / "dist" / "main.exe")
+            local_sha = calculate_git_blob_sha(current_exe) if current_exe.exists() else ""
+
+            ctx = ssl.create_default_context()
+            req = urllib.request.Request(
+                GITHUB_API_EXE_URL,
+                headers={"User-Agent": "Volna-Client-Updater", "Accept": "application/vnd.github.v3+json"}
+            )
+            with urllib.request.urlopen(req, timeout=8.0, context=ctx) as resp:
+                meta = json.loads(resp.read().decode("utf-8"))
+
+            remote_sha = meta.get("sha", "")
+            download_url = meta.get("download_url")
+
+            if remote_sha and download_url and local_sha != remote_sha:
+                self._download(download_url)
+        except Exception:
+            pass
+
+    def _download(self, url: str) -> None:
+        temp_dest = PENDING_UPDATE_FILE
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=60.0) as resp, open(temp_dest, "wb") as out_file:
+                while chunk := resp.read(65536):
+                    out_file.write(chunk)
+
+            show_update_window()
+        except Exception:
+            if temp_dest.exists():
+                temp_dest.unlink(missing_ok=True)
+
+
+# ==========================================
+# ИКОНКИ И КОНФИГУРАЦИЯ
+# ==========================================
 
 def ensure_app_icons() -> Image.Image:
     img = Image.new("RGBA", (256, 256), color=(0, 0, 0, 0))
@@ -88,117 +308,6 @@ def ensure_app_icons() -> Image.Image:
 
 
 APP_ICON_IMAGE = ensure_app_icons()
-
-
-class NeonToastEngine:
-    def __init__(self) -> None:
-        self._queue: queue.Queue[tuple[str, str, bool]] = queue.Queue()
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-        self.root: tk.Tk | None = None
-
-    def _loop(self) -> None:
-        self.root = tk.Tk()
-        self.root.withdraw()
-        self._check_queue()
-        self.root.mainloop()
-
-    def _check_queue(self) -> None:
-        try:
-            while not self._queue.empty():
-                title, msg, is_file = self._queue.get_nowait()
-                self._render_toast(title, msg, is_file)
-        except Exception:
-            pass
-        if self.root:
-            self.root.after(100, self._check_queue)
-
-    def show(self, title: str, message: str, is_file: bool = False) -> None:
-        self._queue.put((title, message, is_file))
-
-    def _render_toast(self, title: str, message: str, is_file: bool) -> None:
-        if not self.root:
-            return
-        toast = tk.Toplevel(self.root)
-        toast.overrideredirect(True)
-        toast.attributes("-topmost", True)
-        toast.configure(bg="#35e0c8")
-
-        frame = tk.Frame(toast, bg="#0c1322", padx=14, pady=12)
-        frame.pack(padx=1, pady=1, fill="both", expand=True)
-
-        header_frame = tk.Frame(frame, bg="#0c1322")
-        header_frame.pack(fill="x")
-
-        icon_text = "📁 " if is_file else "🌊 "
-        lbl_icon = tk.Label(header_frame, text=icon_text, font=("Segoe UI", 12), bg="#0c1322", fg="#35e0c8")
-        lbl_icon.pack(side="left")
-
-        lbl_title = tk.Label(header_frame, text=f"ВОЛНА · {title}", font=("Segoe UI", 10, "bold"), bg="#0c1322", fg="#35e0c8")
-        lbl_title.pack(side="left", padx=4)
-
-        lbl_close = tk.Label(header_frame, text="✕", font=("Segoe UI", 9, "bold"), bg="#0c1322", fg="#57637d", cursor="hand2")
-        lbl_close.pack(side="right")
-        lbl_close.bind("<Button-1>", lambda e: toast.destroy())
-
-        clean_text = message if len(message) <= 95 else message[:92] + "..."
-        lbl_msg = tk.Label(frame, text=clean_text, font=("Segoe UI", 9), bg="#0c1322", fg="#eef4fc", wraplength=280, justify="left")
-        lbl_msg.pack(anchor="w", pady=(6, 0))
-
-        def on_click(e: Any) -> None:
-            restore_window()
-            toast.destroy()
-
-        for widget in (frame, lbl_icon, lbl_title, lbl_msg):
-            widget.bind("<Button-1>", on_click)
-            widget.config(cursor="hand2")
-
-        toast.update_idletasks()
-        sw = toast.winfo_screenwidth()
-        sh = toast.winfo_screenheight()
-        w = 320
-        h = toast.winfo_reqheight()
-        x = sw - w - 24
-        y = sh - h - 56
-        toast.geometry(f"{w}x{h}+{x}+{y}")
-
-        toast.after(4500, lambda: self._safe_destroy(toast))
-
-    def _safe_destroy(self, toast: tk.Toplevel) -> None:
-        try:
-            toast.destroy()
-        except Exception:
-            pass
-
-
-toast_engine = NeonToastEngine()
-
-
-class MetadataParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.in_title: bool = False
-        self.title: str = ""
-        self.description: str = ""
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attr_dict = {k.lower(): (v or "") for k, v in attrs}
-        if tag == "title":
-            self.in_title = True
-        elif tag == "meta":
-            prop = attr_dict.get("property", "") or attr_dict.get("name", "")
-            if prop.lower() in ("og:description", "description") and not self.description:
-                self.description = attr_dict.get("content", "")
-            elif prop.lower() == "og:title" and not self.title:
-                self.title = attr_dict.get("content", "")
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag == "title":
-            self.in_title = False
-
-    def handle_data(self, data: str) -> None:
-        if self.in_title and not self.title:
-            self.title = data.strip()
 
 
 @dataclass(slots=True)
@@ -227,7 +336,6 @@ class AppConfig:
 
 config = AppConfig.load()
 tray_icon: pystray.Icon | None = None
-main_window: webview.Window | None = None
 is_window_focused: bool = False
 cached_history: list[dict[str, Any]] = []
 
@@ -245,36 +353,9 @@ def run_js(js_code: str) -> None:
             pass
 
 
-def set_taskbar_visibility(visible: bool) -> None:
-    """Управляет отображением окна и его иконки на панели задач Windows."""
-    if sys.platform != "win32":
-        return
-    hwnd = ctypes.windll.user32.FindWindowW(None, "ВОЛНА — Мессенджер")
-    if hwnd and ctypes.windll.user32.IsWindow(hwnd):
-        cmd = SW_RESTORE if visible else SW_HIDE
-        ctypes.windll.user32.ShowWindow(hwnd, cmd)
-
-
-def apply_taskbar_icon() -> None:
-    if sys.platform != "win32":
-        return
-    for _ in range(25):
-        hwnd = ctypes.windll.user32.FindWindowW(None, "ВОЛНА — Мессенджер")
-        if hwnd and ctypes.windll.user32.IsWindow(hwnd):
-            if ICON_ICO_PATH.exists():
-                hicon_big = ctypes.windll.user32.LoadImageW(0, str(ICON_ICO_PATH), 1, 32, 32, 0x00000010)
-                hicon_small = ctypes.windll.user32.LoadImageW(0, str(ICON_ICO_PATH), 1, 16, 16, 0x00000010)
-                if hicon_big:
-                    ctypes.windll.user32.SendMessageW(hwnd, 0x0080, 1, hicon_big)
-                if hicon_small:
-                    ctypes.windll.user32.SendMessageW(hwnd, 0x0080, 0, hicon_small)
-            
-            # Если приложение стартует в фоне (в трее) — мгновенно убираем кнопку с панели задач
-            if not is_window_focused:
-                set_taskbar_visibility(False)
-            break
-        time.sleep(0.15)
-
+# ==========================================
+# СЕТЕВОЙ КЛИЕНТ
+# ==========================================
 
 class NetworkWorker(threading.Thread):
     def __init__(self, nickname: str) -> None:
@@ -307,9 +388,7 @@ class NetworkWorker(threading.Thread):
                         self.connected = True
                         self.last_known_server = (host, port)
 
-                    print(f"[TCP] Подключено к {host}:{port}")
                     run_js("window.js_set_connection_status(true);")
-
                     self.send({"action": "register", "nickname": self.nickname})
                     self.send({"action": "get_history"})
                 except Exception:
@@ -329,8 +408,7 @@ class NetworkWorker(threading.Thread):
                 if msg is None:
                     raise ConnectionResetError()
 
-                action = msg.get("action")
-                match action:
+                match msg.get("action"):
                     case "file_download_response":
                         self._save_incoming_file(
                             msg.get("file_id", ""),
@@ -349,22 +427,18 @@ class NetworkWorker(threading.Thread):
                         cached_history.append(msg)
                         payload = json.dumps(msg)
                         run_js(f"window.js_add_message({payload});")
-                        self._handle_incoming_notification(msg)
+                        if not is_window_focused and msg.get("sender") != self.nickname:
+                            show_toast_window(msg)
                     case "file":
                         cached_history.append(msg)
                         payload = json.dumps(msg)
                         run_js(f"window.js_add_message({payload});")
                         self._auto_download_if_needed(msg.get("file_id"), msg.get("filename"))
-                        self._handle_incoming_notification(msg, is_file=True)
-                    case "reaction_update":
-                        msg_id = msg.get("msg_id")
-                        reactions = msg.get("reactions", {})
-                        for h_msg in cached_history:
-                            if h_msg.get("id") == msg_id or h_msg.get("file_id") == msg_id:
-                                h_msg["reactions"] = reactions
-                                break
-                        payload_rx = json.dumps(reactions)
-                        run_js(f"window.js_update_reactions('{msg_id}', {payload_rx});")
+                        if not is_window_focused and msg.get("sender") != self.nickname:
+                            local_p = DOWNLOADS_DIR / f"{msg.get('file_id')}_{msg.get('filename')}"
+                            if local_p.exists():
+                                msg["content_url"] = str(local_p).replace("\\", "/")
+                            show_toast_window(msg)
             except Exception:
                 self.connected = False
                 run_js("window.js_set_connection_status(false);")
@@ -376,17 +450,6 @@ class NetworkWorker(threading.Thread):
                             pass
                         self.sock = None
                 time.sleep(2)
-
-    def _handle_incoming_notification(self, msg: dict[str, Any], is_file: bool = False) -> None:
-        sender = msg.get("sender", "Аноним")
-        if sender == self.nickname:
-            return
-
-        if not main_window or not is_window_focused:
-            if is_file:
-                toast_engine.show(sender, msg.get("filename", "Новый файл"), is_file=True)
-            else:
-                toast_engine.show(sender, msg.get("text", ""))
 
     def _auto_download_if_needed(self, file_id: str | None, filename: str | None) -> None:
         if not file_id or not filename:
@@ -407,8 +470,8 @@ class NetworkWorker(threading.Thread):
             rel_url = f"downloads/{file_id}_{filename}"
             clean_path = str(local_path).replace("\\", "/")
             run_js(f"window.js_on_file_ready('{file_id}', '{filename}', '{clean_path}', '{rel_url}');")
-        except Exception as e:
-            print(f"[!] Ошибка сохранения: {e}", file=sys.stderr)
+        except Exception:
+            pass
 
     def send(self, data_dict: dict[str, Any]) -> bool:
         if not self.connected or not self.sock:
@@ -454,7 +517,6 @@ class NetworkWorker(threading.Thread):
             pass
         finally:
             udp_sock.close()
-
         return None
 
     def _ping_tcp(self, ip: str) -> bool:
@@ -477,6 +539,10 @@ class NetworkWorker(threading.Thread):
 worker = NetworkWorker(config.nickname)
 
 
+# ==========================================
+# JS-API ОСНОВНОГО ОКНА
+# ==========================================
+
 class JsApi:
     def py_frontend_ready(self) -> dict[str, Any]:
         global saved_window_x, saved_window_y
@@ -487,7 +553,6 @@ class JsApi:
             saved_window_x = max(40, (sw - WIN_WIDTH) // 2)
             saved_window_y = max(40, (sh - WIN_HEIGHT) // 2)
 
-        threading.Thread(target=apply_taskbar_icon, daemon=True).start()
         if not is_window_focused:
             set_taskbar_visibility(False)
 
@@ -497,37 +562,8 @@ class JsApi:
         return {
             "nickname": config.nickname,
             "connected": worker.connected,
-            "history": cached_history,
-            "custom_cursors": self.py_get_custom_cursors()
+            "history": cached_history
         }
-
-    def py_get_custom_cursors(self) -> dict[str, str]:
-        cursors = {}
-        if not CURSORS_DIR.exists():
-            return cursors
-
-        mapping = {
-            "default": ["default.png", "default.cur", "cursor.png", "cursor.cur"],
-            "pointer": ["pointer.png", "pointer.cur", "hand.png", "hand.cur"],
-            "text": ["text.png", "text.cur", "ibeam.png", "beam.png"],
-            "res_n": ["res-n.png", "n-resize.png", "res_n.png"],
-            "res_s": ["res-s.png", "s-resize.png", "res_s.png"],
-            "res_e": ["res-e.png", "e-resize.png", "res_e.png"],
-            "res_w": ["res-w.png", "w-resize.png", "res_w.png"],
-            "res_nw": ["res-nw.png", "nw-resize.png", "res_nw.png"],
-            "res_ne": ["res-ne.png", "ne-resize.png", "res_ne.png"],
-            "res_sw": ["res-sw.png", "sw-resize.png", "res_sw.png"],
-            "res_se": ["res-se.png", "se-resize.png", "res_se.png"],
-        }
-
-        for role, filenames in mapping.items():
-            for fn in filenames:
-                p = CURSORS_DIR / fn
-                if p.exists():
-                    cursors[role] = f"cursors/{fn}"
-                    break
-
-        return cursors
 
     def py_get_window_bounds(self) -> dict[str, int]:
         if main_window:
@@ -546,30 +582,16 @@ class JsApi:
             saved_window_y = int(y)
             main_window.move(saved_window_x, saved_window_y)
 
-    def py_resize_window(self, x: int, y: int, w: int, h: int) -> None:
-        global saved_window_x, saved_window_y
-        if main_window:
-            saved_window_x = int(x)
-            saved_window_y = int(y)
-            main_window.move(saved_window_x, saved_window_y)
-            main_window.resize(int(w), int(h))
-
     def py_hide_window(self) -> None:
-        """Скрытие в трей с полным удалением из панели задач."""
         global is_window_focused
         is_window_focused = False
         set_taskbar_visibility(False)
 
     def py_minimize_window(self) -> None:
-        """Стандартное сворачивание (иконка остается на панели задач)."""
         global is_window_focused
         is_window_focused = False
         if main_window:
             main_window.minimize()
-
-    def py_set_window_focus(self, focused: bool) -> None:
-        global is_window_focused
-        is_window_focused = focused
 
     def py_set_nickname(self, new_nickname: str) -> None:
         nick = new_nickname.strip() or "User"
@@ -582,19 +604,7 @@ class JsApi:
     def py_send_text(self, text: str) -> None:
         if not text.strip():
             return
-        worker.send({
-            "action": "msg",
-            "text": text,
-            "time": time.strftime("%H:%M")
-        })
-
-    def py_upload_base64_file(self, filename: str, content_b64: str) -> None:
-        worker.send({
-            "action": "file_upload",
-            "filename": filename,
-            "content": content_b64,
-            "time": time.strftime("%H:%M")
-        })
+        worker.send({"action": "msg", "text": text, "time": time.strftime("%H:%M")})
 
     def py_select_and_send_file(self) -> None:
         def _picker() -> None:
@@ -611,95 +621,27 @@ class JsApi:
             with open(filepath, "rb") as f:
                 b64_data = base64.b64encode(f.read()).decode("utf-8")
 
-            self.py_upload_base64_file(filename, b64_data)
+            worker.send({
+                "action": "file_upload",
+                "filename": filename,
+                "content": b64_data,
+                "time": time.strftime("%H:%M")
+            })
 
         threading.Thread(target=_picker, daemon=True).start()
 
-    def py_toggle_reaction(self, msg_id: str, emoji: str) -> None:
-        worker.send({
-            "action": "reaction",
-            "msg_id": msg_id,
-            "emoji": emoji
-        })
-
-    def py_open_link(self, url: str) -> None:
-        """Открытие веб-ссылки в браузере по умолчанию."""
-        target_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
-        try:
-            webbrowser.open(target_url, new=2)
-        except Exception as e:
-            run_js(f"window.js_show_toast('Не удалось открыть ссылку: {e}');")
-
     def py_open_file(self, filepath: str) -> None:
-        if filepath.startswith(("http://", "https://")):
-            self.py_open_link(filepath)
-            return
-
         path = os.path.abspath(filepath)
-        if not os.path.exists(path):
-            run_js("window.js_show_toast('Файл ещё загружается...');")
-            return
-
-        try:
+        if os.path.exists(path):
             if sys.platform == "win32":
                 os.startfile(path)
             elif sys.platform == "darwin":
                 subprocess.Popen(["open", path])
             else:
                 subprocess.Popen(["xdg-open", path])
-        except Exception as e:
-            run_js(f"window.js_show_toast('Ошибка открытия: {e}');")
-
-    def py_open_folder(self, filepath: str) -> None:
-        path = os.path.abspath(filepath)
-        try:
-            if sys.platform == "win32":
-                subprocess.Popen(f'explorer /select,"{path}"')
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", "-R", path])
-            else:
-                subprocess.Popen(["xdg-open", os.path.dirname(path)])
-        except Exception as e:
-            run_js(f"window.js_show_toast('Ошибка открытия папки: {e}');")
-
-    def py_fetch_link_preview(self, url: str) -> None:
-        def _fetch() -> None:
-            target_url = url if url.startswith("http") else f"https://{url}"
-            try:
-                req = urllib.request.Request(
-                    target_url,
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-                )
-                with urllib.request.urlopen(req, timeout=3.5) as resp:
-                    charset = resp.headers.get_content_charset() or "utf-8"
-                    content = resp.read(65536).decode(charset, errors="replace")
-
-                parser = MetadataParser()
-                parser.feed(content)
-                domain = urllib.parse.urlparse(target_url).netloc
-                title = parser.title or domain
-                desc = parser.description or "Нажмите, чтобы открыть ссылку"
-
-                payload = json.dumps({
-                    "title": html.unescape(title),
-                    "domain": domain,
-                    "desc": html.unescape(desc)
-                })
-                run_js(f"window.js_on_link_preview_ready('{url}', {payload});")
-            except Exception:
-                domain = urllib.parse.urlparse(target_url).netloc
-                payload = json.dumps({
-                    "title": domain or url,
-                    "domain": domain,
-                    "desc": "Внешний веб-ресурс"
-                })
-                run_js(f"window.js_on_link_preview_ready('{url}', {payload});")
-
-        threading.Thread(target=_fetch, daemon=True).start()
 
 
 def restore_window() -> None:
-    """Восстановление окна из трея и возврат значка на панель задач."""
     global is_window_focused
     is_window_focused = True
     set_taskbar_visibility(True)
@@ -719,6 +661,10 @@ def quit_application() -> None:
         tray_icon.stop()
     if main_window:
         main_window.destroy()
+    if toast_window:
+        toast_window.destroy()
+    if update_window:
+        update_window.destroy()
     os._exit(0)
 
 
@@ -733,26 +679,68 @@ def setup_tray() -> None:
 
 
 if __name__ == "__main__":
+    if check_and_apply_pending_update():
+        sys.exit(0)
+
     worker.start()
     threading.Thread(target=setup_tray, daemon=True).start()
+    AutoUpdater().start()
 
-    api = JsApi()
-    html_path = WEB_DIR / "index.html"
+    sw, sh = get_screen_resolution()
 
     main_window = webview.create_window(
         title="ВОЛНА — Мессенджер",
-        url=str(html_path),
-        js_api=api,
+        url=str(WEB_DIR / "index.html"),
+        js_api=JsApi(),
         width=WIN_WIDTH,
         height=WIN_HEIGHT,
-        x=-15000,
-        y=-15000,
+        x=max(40, (sw - WIN_WIDTH) // 2),
+        y=max(40, (sh - WIN_HEIGHT) // 2),
         min_size=(680, 520),
         frameless=True,
         resizable=True,
-        easy_drag=False
+        easy_drag=False,
+        hidden=True
     )
 
-    toast_engine.show("Приложение запущено", "ВОЛНА работает в трее. Кликните для открытия.")
+    toast_window = webview.create_window(
+        title="VolnaToastWidget",
+        url=str(WEB_DIR / "toast.html"),
+        js_api=ToastJsApi(),
+        width=TOAST_W,
+        height=TOAST_H,
+        x=sw - TOAST_W - 20,
+        y=sh - TOAST_H - 50,
+        frameless=True,
+        easy_drag=False,
+        on_top=True,
+        transparent=True,
+        hidden=True
+    )
 
-    webview.start(debug=False)
+    update_window = webview.create_window(
+        title="VolnaUpdateModal",
+        url=str(WEB_DIR / "update.html"),
+        js_api=UpdateJsApi(),
+        width=MODAL_W,
+        height=MODAL_H,
+        x=(sw - MODAL_W) // 2,
+        y=(sh - MODAL_H) // 2,
+        frameless=True,
+        easy_drag=False,
+        on_top=True,
+        transparent=True,
+        hidden=True
+    )
+
+    def _welcome() -> None:
+        time.sleep(1.0)
+        show_toast_window({
+            "sender": "ВОЛНА",
+            "text": "Приложение запущено и работает в трее.",
+            "time": time.strftime("%H:%M")
+        })
+
+    threading.Thread(target=_welcome, daemon=True).start()
+
+    webview.start(debug=DEBUG)
