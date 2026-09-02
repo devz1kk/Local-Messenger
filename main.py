@@ -4,6 +4,7 @@
 - Растягивание окна во все 8 направлений и перемещение за шапку
 - Поддержка кастомных курсоров из папки web/cursors/
 - Иконка в панели задач, неразрывный TCP-клиент и неоновые уведомления
+- Корректное скрытие кнопки из панели задач при работе в фоновом режиме (в трее)
 """
 
 from __future__ import annotations
@@ -35,6 +36,10 @@ from typing import Any
 import pystray
 from PIL import Image, ImageDraw
 import webview
+
+# Константы Win32 ShowWindow
+SW_HIDE: int = 0
+SW_RESTORE: int = 9
 
 if sys.platform == "win32":
     try:
@@ -240,6 +245,16 @@ def run_js(js_code: str) -> None:
             pass
 
 
+def set_taskbar_visibility(visible: bool) -> None:
+    """Управляет отображением окна и его иконки на панели задач Windows."""
+    if sys.platform != "win32":
+        return
+    hwnd = ctypes.windll.user32.FindWindowW(None, "ВОЛНА — Мессенджер")
+    if hwnd and ctypes.windll.user32.IsWindow(hwnd):
+        cmd = SW_RESTORE if visible else SW_HIDE
+        ctypes.windll.user32.ShowWindow(hwnd, cmd)
+
+
 def apply_taskbar_icon() -> None:
     if sys.platform != "win32":
         return
@@ -253,6 +268,10 @@ def apply_taskbar_icon() -> None:
                     ctypes.windll.user32.SendMessageW(hwnd, 0x0080, 1, hicon_big)
                 if hicon_small:
                     ctypes.windll.user32.SendMessageW(hwnd, 0x0080, 0, hicon_small)
+            
+            # Если приложение стартует в фоне (в трее) — мгновенно убираем кнопку с панели задач
+            if not is_window_focused:
+                set_taskbar_visibility(False)
             break
         time.sleep(0.15)
 
@@ -469,6 +488,9 @@ class JsApi:
             saved_window_y = max(40, (sh - WIN_HEIGHT) // 2)
 
         threading.Thread(target=apply_taskbar_icon, daemon=True).start()
+        if not is_window_focused:
+            set_taskbar_visibility(False)
+
         if worker.connected:
             worker.send({"action": "get_history"})
 
@@ -533,12 +555,13 @@ class JsApi:
             main_window.resize(int(w), int(h))
 
     def py_hide_window(self) -> None:
+        """Скрытие в трей с полным удалением из панели задач."""
         global is_window_focused
         is_window_focused = False
-        if main_window:
-            main_window.move(-15000, -15000)
+        set_taskbar_visibility(False)
 
     def py_minimize_window(self) -> None:
+        """Стандартное сворачивание (иконка остается на панели задач)."""
         global is_window_focused
         is_window_focused = False
         if main_window:
@@ -676,8 +699,10 @@ class JsApi:
 
 
 def restore_window() -> None:
+    """Восстановление окна из трея и возврат значка на панель задач."""
     global is_window_focused
     is_window_focused = True
+    set_taskbar_visibility(True)
     if main_window:
         main_window.move(saved_window_x, saved_window_y)
         main_window.restore()
