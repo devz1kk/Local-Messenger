@@ -1,10 +1,10 @@
 __pycache__/
 *.pyc
-client_config.json
 web/downloads/
 .venv/
 venv/
-dist/
+dist/downloads/
+*.json
 build/
 downloads/
 *.spec
