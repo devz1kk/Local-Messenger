@@ -93,32 +93,51 @@ html, body {
   display: none;
   border-radius: 10px;
   overflow: hidden;
-  max-height: 50px;
-  background: rgba(0,0,0,0.4);
-  border: 1px solid rgba(0, 242, 254, 0.4);
-  margin: 2px 0;
+  max-height: 64px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(0, 242, 254, 0.35);
+  margin: 3px 0;
 }
 .tg-media img {
   width: 100%;
-  height: 100%;
+  height: 64px;
   object-fit: cover;
   display: block;
 }
 
+/* Карточка файла как в основном чате */
 .file-card {
   display: none;
   align-items: center;
-  gap: 8px;
-  background: rgba(10, 20, 38, 0.9);
-  border: 1px solid rgba(0, 242, 254, 0.35);
-  padding: 4px 10px;
-  border-radius: 8px;
+  gap: 10px;
+  background: rgba(9, 17, 32, 0.85);
+  border: 1px solid rgba(140, 210, 255, 0.25);
+  padding: 8px 12px;
+  border-radius: 12px;
+  margin: 3px 0;
+}
+.file-card .file-icon {
+  font-size: 20px;
+  flex: none;
+}
+.file-card .file-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+.file-card .file-name {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin: 2px 0;
+}
+.file-card .file-type {
+  font-size: 10px;
+  color: var(--cyan-glow);
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .footer-row {
@@ -145,13 +164,18 @@ html, body {
   
   <div class="msg-body" id="msgText">Загрузка сообщения...</div>
 
+  <!-- Медиа-превью -->
   <div class="tg-media" id="mediaBox">
     <img id="mediaImg" src="" alt="Медиа"/>
   </div>
 
+  <!-- Карточка документа -->
   <div class="file-card" id="fileBox">
-    <span style="font-size: 14px;">📄</span>
-    <span id="fileName" style="overflow:hidden;text-overflow:ellipsis;">Файл</span>
+    <span class="file-icon" id="fileIcon">📄</span>
+    <div class="file-info">
+      <span class="file-name" id="fileName">Файл</span>
+      <span class="file-type" id="fileType">Документ</span>
+    </div>
   </div>
 
   <div class="footer-row">
@@ -176,6 +200,8 @@ function setToastPayload(data) {
   const mediaImg = document.getElementById('mediaImg');
   const fileBox = document.getElementById('fileBox');
   const fileName = document.getElementById('fileName');
+  const fileIcon = document.getElementById('fileIcon');
+  const fileType = document.getElementById('fileType');
 
   textEl.style.display = 'none';
   mediaBox.style.display = 'none';
@@ -183,12 +209,25 @@ function setToastPayload(data) {
 
   if (data.action === 'file' || data.filename) {
     const fn = (data.filename || '').toLowerCase();
-    const isImg = /\.(jpg|jpeg|png|gif|webp)$/.test(fn);
+    const isImg = /\.(jpg|jpeg|png|gif|webp|svg)$/.test(fn);
+    const isVid = /\.(mp4|webm|mov)$/.test(fn);
+    const isAud = /\.(mp3|wav|ogg)$/.test(fn);
+
     if (isImg && data.content_url) {
       mediaImg.src = data.content_url;
       mediaBox.style.display = 'block';
     } else {
-      fileName.textContent = data.filename || 'Документ';
+      fileName.textContent = data.filename || 'Файл';
+      if (isVid) {
+        fileIcon.textContent = '🎬';
+        fileType.textContent = 'Видеозапись';
+      } else if (isAud) {
+        fileIcon.textContent = '🎵';
+        fileType.textContent = 'Аудиозапись';
+      } else {
+        fileIcon.textContent = '📄';
+        fileType.textContent = fn.split('.').pop().toUpperCase() || 'ФАЙЛ';
+      }
       fileBox.style.display = 'flex';
     }
   } else {

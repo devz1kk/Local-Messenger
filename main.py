@@ -338,7 +338,7 @@ class AutoUpdater(threading.Thread):
 # =====================================================================
 # WIN32 МАСКА И ОКНА
 # =====================================================================
-TOAST_W, TOAST_H = 340, 110
+TOAST_W, TOAST_H = 340, 130
 MODAL_W, MODAL_H = 430, 160
 
 main_window: webview.Window | None = None
