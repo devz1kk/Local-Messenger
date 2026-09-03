@@ -5,41 +5,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Unbounded:wght@700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg0: #040711;
-  --line-acc: rgba(0, 242, 254, 0.55);
+  --bg-dark: #040914;
+  --cyan-neon: #00f2fe;
+  --cyan-glow: #4facfe;
   --ink: #f1f6fd;
-  --mut: #94a5c4;
-  --acc: #00f2fe;
-  --acc2: #4facfe;
   --coral: #ff5e7e;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: transparent;
-  font-family: 'Inter', sans-serif;
-  user-select: none;
-}
 
-/* Форма входящего сообщения без внешних прямоугольных рамок */
-.toast-bubble {
+html, body {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, rgba(20, 33, 56, 0.98) 0%, rgba(10, 18, 32, 1) 100%);
-  border: 1.5px solid var(--line-acc);
-  border-radius: 20px 20px 20px 6px;
+  overflow: hidden;
+  background: #040914 !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  user-select: none;
   color: var(--ink);
-  padding: 10px 14px;
+}
+
+.toast-bubble {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #0a1932 0%, #040914 100%);
+  border: 2px solid var(--cyan-neon);
+  border-radius: 20px;
+  color: var(--ink);
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   cursor: pointer;
-  box-shadow: inset 0 0 15px rgba(0, 242, 254, 0.12);
+  box-shadow: 
+    inset 0 0 16px rgba(0, 242, 254, 0.45),
+    inset 0 0 32px rgba(0, 242, 254, 0.2);
   overflow: hidden;
 }
 
@@ -48,19 +51,22 @@ html, body {
   align-items: center;
   justify-content: space-between;
 }
+
 .sender-name {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 800;
-  background: linear-gradient(90deg, var(--acc2), var(--acc));
+  background: linear-gradient(90deg, #ffffff, var(--cyan-neon));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
+  text-shadow: 0 0 12px rgba(0, 242, 254, 0.6);
 }
+
 .btn-close {
-  color: #5c6c8c;
-  font-size: 13px;
-  padding: 1px 5px;
+  color: #6a82a8;
+  font-size: 14px;
+  padding: 2px 6px;
   border-radius: 6px;
   cursor: pointer;
   transition: all .2s ease;
@@ -87,9 +93,9 @@ html, body {
   display: none;
   border-radius: 10px;
   overflow: hidden;
-  max-height: 52px;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(0,242,254,0.3);
+  max-height: 50px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(0, 242, 254, 0.4);
   margin: 2px 0;
 }
 .tg-media img {
@@ -103,11 +109,11 @@ html, body {
   display: none;
   align-items: center;
   gap: 8px;
-  background: rgba(9, 17, 32, 0.8);
-  border: 1px solid rgba(120, 180, 255, 0.2);
-  padding: 4px 8px;
+  background: rgba(10, 20, 38, 0.9);
+  border: 1px solid rgba(0, 242, 254, 0.35);
+  padding: 4px 10px;
   border-radius: 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -120,10 +126,12 @@ html, body {
   justify-content: flex-end;
   align-items: center;
 }
+
 .meta-time {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  opacity: 0.65;
+  color: var(--cyan-glow);
+  opacity: 0.9;
 }
 </style>
 </head>
@@ -131,11 +139,11 @@ html, body {
 
 <div class="toast-bubble" onclick="onToastClick()">
   <div class="header-row">
-    <span class="sender-name" id="senderNick">Собеседник</span>
+    <span class="sender-name" id="senderNick">ВОЛНА</span>
     <span class="btn-close" onclick="event.stopPropagation(); onClose();">✕</span>
   </div>
   
-  <div class="msg-body" id="msgText"></div>
+  <div class="msg-body" id="msgText">Загрузка сообщения...</div>
 
   <div class="tg-media" id="mediaBox">
     <img id="mediaImg" src="" alt="Медиа"/>
@@ -143,7 +151,7 @@ html, body {
 
   <div class="file-card" id="fileBox">
     <span style="font-size: 14px;">📄</span>
-    <span id="fileName" style="overflow:hidden;text-overflow:ellipsis;">Документ</span>
+    <span id="fileName" style="overflow:hidden;text-overflow:ellipsis;">Файл</span>
   </div>
 
   <div class="footer-row">
@@ -159,7 +167,8 @@ function callPy(fn, ...args) {
 }
 
 function setToastPayload(data) {
-  document.getElementById('senderNick').textContent = data.sender || 'Собеседник';
+  if (!data) return;
+  document.getElementById('senderNick').textContent = data.sender || 'ВОЛНА';
   document.getElementById('msgTime').textContent = data.time || '';
   
   const textEl = document.getElementById('msgText');
@@ -179,7 +188,7 @@ function setToastPayload(data) {
       mediaImg.src = data.content_url;
       mediaBox.style.display = 'block';
     } else {
-      fileName.textContent = data.filename || 'Файл';
+      fileName.textContent = data.filename || 'Документ';
       fileBox.style.display = 'flex';
     }
   } else {
@@ -197,7 +206,11 @@ function onClose() {
 }
 
 window.addEventListener('pywebviewready', () => {
-  callPy('py_toast_ready');
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.py_get_toast_payload) {
+    window.pywebview.api.py_get_toast_payload().then(data => {
+      if (data) setToastPayload(data);
+    });
+  }
 });
 </script>
 </body>

@@ -1,6 +1,6 @@
 """
 Клиент мессенджера 'ВОЛНА' на базе pywebview.
-Аппаратная маска скругления Win32 для toast.html и update.html без черных рамок.
+Мгновенный рендеринг и скругление окон Win32 без черных углов и белых экранов.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ import time
 import tkinter as tk
 from tkinter import filedialog
 import urllib.request
-import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,14 +32,14 @@ import webview
 # ==========================================
 # КОНФИГУРАЦИЯ И СИСТЕМНЫЕ ВЫЗОВЫ
 # ==========================================
-DEBUG: bool = False
+DEBUG: bool = True
 SW_HIDE: int = 0
 SW_RESTORE: int = 9
 SW_SHOWNOACTIVATE: int = 4
 
-HWND_TOPMOST = -1
-SWP_NOACTIVATE = 0x0010
-SWP_SHOWWINDOW = 0x0040
+HWND_TOPMOST: int = -1
+SWP_NOACTIVATE: int = 0x0010
+SWP_SHOWWINDOW: int = 0x0040
 
 if sys.platform == "win32":
     try:
@@ -94,6 +93,8 @@ def apply_update_and_restart(new_exe_path: Path) -> None:
 
     pid = os.getpid()
     updater_bat = DATA_DIR / "_apply_update.bat"
+    
+    # В батнике явно сбрасываем служебные переменные перед стартом
     bat_script = f"""@echo off
 cd /d "%~dp0"
 :wait_loop
@@ -102,6 +103,10 @@ if not errorlevel 1 (
     timeout /t 1 /nobreak >nul
     goto wait_loop
 )
+set _MEIPASS2=
+set _PYI_ARCHIVE_FILE=
+set _PYI_APPLICATION_HOME_DIR=
+set _PYI_SPLASH_IPC=
 move /y "{new_exe_path.name}" "{current_exe.name}" >nul
 start "" "{current_exe.name}"
 del "%~f0"
@@ -109,8 +114,16 @@ del "%~f0"
     try:
         with open(updater_bat, "w", encoding="utf-8") as f:
             f.write(bat_script)
+
+        # Очищаем окружение PyInstaller перед запуском cmd.exe
+        clean_env = {
+            k: v for k, v in os.environ.items() 
+            if not k.startswith("_PYI") and k != "_MEIPASS2"
+        }
+
         subprocess.Popen(
             ["cmd.exe", "/c", str(updater_bat)],
+            env=clean_env,
             creationflags=0x08000000 if sys.platform == "win32" else 0,
             close_fds=True
         )
@@ -127,7 +140,7 @@ def check_and_apply_pending_update() -> bool:
 
 
 # ==========================================
-# УПРАВЛЕНИЕ ОКНАМИ И МАСКАМИ СКРУГЛЕНИЯ
+# АППАРАТНАЯ МАСКА СКРУГЛЕНИЯ WIN32
 # ==========================================
 
 TOAST_W, TOAST_H = 340, 110
@@ -138,14 +151,45 @@ toast_window: webview.Window | None = None
 update_window: webview.Window | None = None
 
 toast_timer: threading.Timer | None = None
+last_toast_payload: dict[str, Any] = {}
 
 
-def apply_round_mask(hwnd: int, width: int, height: int, radius: int = 24) -> None:
-    """Аппаратно отсекает прямоугольные края окна Windows через GDI Rgn."""
+def apply_pixel_perfect_mask(hwnd: int, radius_css: int = 20) -> None:
+    """Аппаратно отсекает все острые углы у окна и дочерних слоев WebView2."""
     if sys.platform != "win32" or not hwnd:
         return
-    rgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, radius, radius)
-    ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True)
+
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+
+    rect = ctypes.wintypes.RECT()
+    user32.GetClientRect(hwnd, ctypes.byref(rect))
+    w = rect.right - rect.left
+    h = rect.bottom - rect.top
+    if w <= 0 or h <= 0:
+        return
+
+    dpi = user32.GetDpiForWindow(hwnd) if hasattr(user32, "GetDpiForWindow") else 96
+    scale = dpi / 96.0 if dpi else 1.0
+    diameter = int(radius_css * scale * 2)
+
+    # Обрезка главного окна
+    rgn_parent = gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, diameter, diameter)
+    user32.SetWindowRgn(hwnd, rgn_parent, True)
+
+    # Обрезка всех дочерних DirectX/WebView2 слоев
+    def _enum_children(child_hwnd: int, _: int) -> bool:
+        c_rect = ctypes.wintypes.RECT()
+        user32.GetClientRect(child_hwnd, ctypes.byref(c_rect))
+        cw = c_rect.right - c_rect.left
+        ch = c_rect.bottom - c_rect.top
+        if cw > 0 and ch > 0:
+            c_rgn = gdi32.CreateRoundRectRgn(0, 0, cw + 1, ch + 1, diameter, diameter)
+            user32.SetWindowRgn(child_hwnd, c_rgn, True)
+        return True
+
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+    user32.EnumChildWindows(hwnd, WNDENUMPROC(_enum_children), 0)
 
 
 def get_screen_resolution() -> tuple[int, int]:
@@ -163,9 +207,12 @@ def set_taskbar_visibility(visible: bool) -> None:
 
 
 def show_toast_window(msg_payload: dict[str, Any]) -> None:
-    global toast_timer
+    """Мгновенно отображает тост с готовым контентом и маской."""
+    global toast_timer, last_toast_payload
     if not toast_window:
         return
+
+    last_toast_payload = msg_payload
 
     if toast_timer:
         toast_timer.cancel()
@@ -175,14 +222,23 @@ def show_toast_window(msg_payload: dict[str, Any]) -> None:
     target_y = sh - TOAST_H - 50
 
     toast_window.move(target_x, target_y)
-    toast_window.evaluate_js(f"setToastPayload({json.dumps(msg_payload)});")
     toast_window.show()
+
+    # Передача данных в DOM
+    try:
+        toast_window.evaluate_js(f"setToastPayload({json.dumps(msg_payload)});")
+    except Exception:
+        pass
 
     if sys.platform == "win32":
         hwnd = ctypes.windll.user32.FindWindowW(None, "VolnaToastWidget")
         if hwnd:
-            apply_round_mask(hwnd, TOAST_W, TOAST_H, radius=22)
-            ctypes.windll.user32.SetWindowPos(hwnd, HWND_TOPMOST, target_x, target_y, TOAST_W, TOAST_H, SWP_NOACTIVATE | SWP_SHOWWINDOW)
+            apply_pixel_perfect_mask(hwnd, radius_css=20)
+            ctypes.windll.user32.SetWindowPos(
+                hwnd, HWND_TOPMOST, target_x, target_y, TOAST_W, TOAST_H, SWP_NOACTIVATE | SWP_SHOWWINDOW
+            )
+            threading.Timer(0.04, lambda: apply_pixel_perfect_mask(hwnd, radius_css=20)).start()
+            threading.Timer(0.12, lambda: apply_pixel_perfect_mask(hwnd, radius_css=20)).start()
 
     toast_timer = threading.Timer(5.5, hide_toast_window)
     toast_timer.daemon = True
@@ -195,20 +251,26 @@ def hide_toast_window() -> None:
 
 
 def show_update_window() -> None:
+    """Мгновенно отображает окно обновления."""
     if not update_window:
         return
     sw, sh = get_screen_resolution()
     target_x = (sw - MODAL_W) // 2
     target_y = (sh - MODAL_H) // 2
+
     update_window.move(target_x, target_y)
     update_window.show()
 
     if sys.platform == "win32":
         hwnd = ctypes.windll.user32.FindWindowW(None, "VolnaUpdateModal")
         if hwnd:
-            apply_round_mask(hwnd, MODAL_W, MODAL_H, radius=26)
-            ctypes.windll.user32.SetWindowPos(hwnd, HWND_TOPMOST, target_x, target_y, MODAL_W, MODAL_H, SWP_SHOWWINDOW)
+            apply_pixel_perfect_mask(hwnd, radius_css=20)
+            ctypes.windll.user32.SetWindowPos(
+                hwnd, HWND_TOPMOST, target_x, target_y, MODAL_W, MODAL_H, SWP_SHOWWINDOW
+            )
             ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
+            threading.Timer(0.04, lambda: apply_pixel_perfect_mask(hwnd, radius_css=20)).start()
+            threading.Timer(0.12, lambda: apply_pixel_perfect_mask(hwnd, radius_css=20)).start()
 
 
 def hide_update_window() -> None:
@@ -221,8 +283,8 @@ def hide_update_window() -> None:
 # ==========================================
 
 class ToastJsApi:
-    def py_toast_ready(self) -> None:
-        pass
+    def py_get_toast_payload(self) -> dict[str, Any]:
+        return last_toast_payload
 
     def py_on_toast_clicked(self) -> None:
         hide_toast_window()
@@ -690,7 +752,7 @@ if __name__ == "__main__":
 
     main_window = webview.create_window(
         title="ВОЛНА — Мессенджер",
-        url=str(WEB_DIR / "index.html"),
+        url=str((WEB_DIR / "index.html").resolve()),
         js_api=JsApi(),
         width=WIN_WIDTH,
         height=WIN_HEIGHT,
@@ -705,7 +767,7 @@ if __name__ == "__main__":
 
     toast_window = webview.create_window(
         title="VolnaToastWidget",
-        url=str(WEB_DIR / "toast.html"),
+        url=str((WEB_DIR / "toast.html").resolve()),
         js_api=ToastJsApi(),
         width=TOAST_W,
         height=TOAST_H,
@@ -714,13 +776,12 @@ if __name__ == "__main__":
         frameless=True,
         easy_drag=False,
         on_top=True,
-        transparent=True,
         hidden=True
     )
 
     update_window = webview.create_window(
         title="VolnaUpdateModal",
-        url=str(WEB_DIR / "update.html"),
+        url=str((WEB_DIR / "update.html").resolve()),
         js_api=UpdateJsApi(),
         width=MODAL_W,
         height=MODAL_H,
@@ -729,12 +790,11 @@ if __name__ == "__main__":
         frameless=True,
         easy_drag=False,
         on_top=True,
-        transparent=True,
         hidden=True
     )
 
     def _welcome() -> None:
-        time.sleep(1.0)
+        time.sleep(1.2)
         show_toast_window({
             "sender": "ВОЛНА",
             "text": "Приложение запущено и работает в трее.",

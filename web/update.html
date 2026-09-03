@@ -5,53 +5,54 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Unbounded:wght@800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=Unbounded:wght@800;900&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg0: #040711;
-  --acc: #00f2fe;
-  --acc2: #4facfe;
-  --coral: #ff5e7e;
-  --line: rgba(0, 242, 254, 0.55);
-  --line2: rgba(140, 210, 255, 0.22);
+  --bg-dark: #040914;
+  --cyan-neon: #00f2fe;
+  --cyan-glow: #4facfe;
+  --line-mut: rgba(140, 210, 255, 0.22);
   --mut: #94a5c4;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
 html, body {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  background: transparent;
-  font-family: 'Inter', sans-serif;
+  background: #040914 !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   user-select: none;
 }
 
-/* Окно полностью ограничено скругленными углами без внешних квадратов */
 .update-container {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  position: relative;
-  background: radial-gradient(ellipse at top, #091730 0%, var(--bg0) 100%);
-  border: 1.5px solid var(--acc);
-  border-radius: 24px;
+  background: radial-gradient(ellipse at top, #091a38 0%, var(--bg-dark) 100%);
+  border: 2px solid var(--cyan-neon);
+  border-radius: 20px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: 20px 24px;
-  box-shadow: inset 0 0 25px rgba(0, 242, 254, 0.15);
+  gap: 16px;
+  padding: 16px 20px;
+  box-shadow: 
+    inset 0 0 20px rgba(0, 242, 254, 0.5),
+    inset 0 0 40px rgba(0, 242, 254, 0.25);
 }
 
-/* Canvas строго внутри скругленного окна */
 #updateBgfx {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 0;
   pointer-events: none;
-  border-radius: 24px;
 }
 
 .glow {
@@ -63,12 +64,12 @@ html, body {
 }
 .g1 {
   width: 200px; height: 200px; left: -40px; top: -50px;
-  background: radial-gradient(circle, rgba(0,242,254,0.25), transparent 70%);
+  background: radial-gradient(circle, rgba(0,242,254,0.3), transparent 70%);
   animation: drift1 14s ease-in-out infinite alternate;
 }
 .g2 {
   width: 220px; height: 220px; right: -50px; bottom: -50px;
-  background: radial-gradient(circle, rgba(255,94,126,0.18), transparent 70%);
+  background: radial-gradient(circle, rgba(79,172,254,0.25), transparent 70%);
   animation: drift2 16s ease-in-out infinite alternate-reverse;
 }
 @keyframes drift1 { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(30px, 20px) scale(1.15); } }
@@ -80,20 +81,20 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
   text-align: center;
 }
 
 h2 {
-  font-family: 'Unbounded', sans-serif;
+  font-family: 'Unbounded', 'Inter', sans-serif;
   font-weight: 900;
-  font-size: 15.5px;
+  font-size: 15px;
   letter-spacing: .06em;
-  background: linear-gradient(135deg, #ffffff 0%, var(--acc) 60%, var(--acc2) 100%);
+  background: linear-gradient(135deg, #ffffff 0%, var(--cyan-neon) 60%, var(--cyan-glow) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: 0 0 20px rgba(0, 242, 254, 0.45);
+  text-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
 }
 
 .update-btns {
@@ -102,7 +103,6 @@ h2 {
   gap: 14px;
 }
 
-/* Кнопки-пилюли в стиле реакций (.rpill) */
 .rpill {
   display: inline-flex;
   align-items: center;
@@ -111,7 +111,7 @@ h2 {
   font-weight: 700;
   padding: 8px 22px;
   border-radius: 99px;
-  border: 1px solid var(--line2);
+  border: 1px solid var(--line-mut);
   transition: all .25s cubic-bezier(0.34, 1.56, 0.64, 1);
   cursor: pointer;
   backdrop-filter: blur(10px);
@@ -122,24 +122,24 @@ h2 {
 }
 
 .btn-later {
-  background: rgba(12, 22, 38, 0.75);
+  background: rgba(12, 22, 38, 0.85);
   color: var(--mut);
 }
 .btn-later:hover {
-  background: rgba(25, 42, 70, 0.9);
+  background: rgba(25, 42, 70, 0.95);
   color: #fff;
-  border-color: rgba(140, 210, 255, 0.4);
+  border-color: rgba(140, 210, 255, 0.5);
 }
 
 .btn-apply {
-  border-color: var(--acc);
-  background: rgba(0, 242, 254, 0.22);
-  box-shadow: 0 0 16px rgba(0, 242, 254, 0.4);
+  border: 1.5px solid var(--cyan-neon);
+  background: rgba(0, 242, 254, 0.24);
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.5), inset 0 0 8px rgba(0, 242, 254, 0.3);
   color: #fff;
 }
 .btn-apply:hover {
-  background: rgba(0, 242, 254, 0.35);
-  box-shadow: 0 0 25px rgba(0, 242, 254, 0.65);
+  background: rgba(0, 242, 254, 0.4);
+  box-shadow: 0 0 26px rgba(0, 242, 254, 0.8), inset 0 0 12px rgba(0, 242, 254, 0.5);
 }
 </style>
 </head>
@@ -166,21 +166,20 @@ function callPy(fn, ...args) {
   }
 }
 
-// Canvas-фон: 3 биоморфные волны и частицы строго внутри карточки
 const cv = document.getElementById('updateBgfx'), cx = cv.getContext('2d');
-let W, H, parts = [], T = 0;
+let W = 430, H = 160, parts = [], T = 0;
 
 function resize() {
-  W = cv.width = window.innerWidth;
-  H = cv.height = window.innerHeight;
+  W = cv.width = window.innerWidth || 430;
+  H = cv.height = window.innerHeight || 160;
 }
 resize();
 window.addEventListener('resize', resize);
 
 for (let i = 0; i < 35; i++) {
   parts.push({
-    x: Math.random() * window.innerWidth,
-    y: Math.random() * window.innerHeight,
+    x: Math.random() * 430,
+    y: Math.random() * 160,
     r: 1.0 + Math.random() * 1.8,
     sp: 0.3 + Math.random() * 0.5,
     alpha: 0.2 + Math.random() * 0.6
@@ -200,7 +199,7 @@ function anim() {
       cx.lineTo(x, y);
     }
     cx.lineTo(W, H);
-    cx.fillStyle = k === 0 ? 'rgba(0, 242, 254, 0.05)' : (k === 1 ? 'rgba(79, 172, 254, 0.04)' : 'rgba(255, 94, 126, 0.02)');
+    cx.fillStyle = k === 0 ? 'rgba(0, 242, 254, 0.05)' : (k === 1 ? 'rgba(79, 172, 254, 0.04)' : 'rgba(0, 242, 254, 0.02)');
     cx.fill();
     cx.strokeStyle = k === 0 ? 'rgba(0, 242, 254, 0.28)' : 'rgba(79, 172, 254, 0.18)';
     cx.lineWidth = 1.2;
@@ -220,7 +219,11 @@ function anim() {
   }
   requestAnimationFrame(anim);
 }
-anim();
+
+window.addEventListener('DOMContentLoaded', () => {
+  resize();
+  anim();
+});
 </script>
 </body>
 </html>
