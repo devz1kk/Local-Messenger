@@ -1,6 +1,7 @@
 """
 Клиент мессенджера 'ВОЛНА' на базе pywebview.
-Модуль самообновления через GitHub Contents API с валидацией хешей и логированием.
+Модуль самообновления через GitHub Contents API с валидацией хешей,
+поддержкой зумерских реакций и генератором кибер-курсоров.
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ PORT: int = 12345
 UDP_PORT: int = 12346
 GITHUB_API_EXE_URL: str = "https://api.github.com/repos/devz1kk/Local-Messenger/contents/dist/main.exe"
 
-# Определение корневых директорий
+# Корневые директории
 if getattr(sys, "frozen", False):
     RESOURCE_DIR: Path = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
     DATA_DIR: Path = Path(sys.executable).parent
@@ -77,15 +78,105 @@ WEB_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # =====================================================================
-# СИСТЕМА ЛОГИРОВАНИЯ ОБНОВЛЕНИЙ (ТОЛЬКО ПРОЦЕСС АПДЕЙТА)
+# ПОДСИСТЕМА КАСТОМНЫХ КИБЕР-КУРСОРОВ (ВЕКТОРНЫЕ DATA-URI + DISK FALLBACK)
+# =====================================================================
+def _svg_to_data_uri(svg_xml: str) -> str:
+    """Упаковывает SVG-разметку в RFC 2397 base64 Data URI."""
+    b64 = base64.b64encode(svg_xml.strip().encode("utf-8")).decode("utf-8")
+    return f"data:image/svg+xml;base64,{b64}"
+
+
+# Векторные неоновые курсоры, стилизованные под тему мессенджера ВОЛНА (#00f2fe)
+SVG_CURSORS: dict[str, str] = {
+    "default": """
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+      <defs>
+        <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#00f2fe" flood-opacity="0.85"/>
+        </filter>
+      </defs>
+      <path d="M4 2 L22 14 L13 16 L17 26 L12 28 L8 18 L4 22 Z" fill="#00f2fe" stroke="#040814" stroke-width="1.6" filter="url(#glow)"/>
+    </svg>
+    """,
+    "pointer": """
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+      <defs>
+        <filter id="pglow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00f2fe" flood-opacity="0.95"/>
+        </filter>
+      </defs>
+      <path d="M10 2 L10 13 L13 13 C14.5 13 15 14 15 15 L17 15 C18.5 15 19 16 19 17 L21 17 C22 17 22 18 22 19 L22 23 C22 27.5 18 30 13 30 C8 30 6 26.5 6 22 L6 16 C6 15 7 14 8 14 C9 14 9.6 14.5 9.8 15.2 L10 13 Z" fill="#00f2fe" stroke="#040814" stroke-width="1.6" filter="url(#pglow)"/>
+    </svg>
+    """,
+    "text": """
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+      <defs>
+        <filter id="tglow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="1.5" flood-color="#00f2fe" flood-opacity="0.9"/>
+        </filter>
+      </defs>
+      <path d="M7 3 L17 3 M12 3 L12 21 M7 21 L17 21" stroke="#00f2fe" stroke-width="2.5" stroke-linecap="round" filter="url(#tglow)"/>
+    </svg>
+    """,
+    "res_n": """
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+      <path d="M12 2 L8 6 M12 2 L16 6 M12 2 L12 22 M8 18 L12 22 L16 18" stroke="#00f2fe" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    """,
+    "res_e": """
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+      <path d="M2 12 L6 8 M2 12 L6 16 M2 12 L22 12 M18 8 L22 12 L18 16" stroke="#00f2fe" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    """,
+    "res_nw": """
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+      <path d="M4 4 L10 4 M4 4 L4 10 M4 4 L20 20 M20 20 L14 20 M20 20 L20 14" stroke="#00f2fe" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    """,
+    "res_ne": """
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+      <path d="M20 4 L14 4 M20 4 L20 10 M20 4 L4 20 M4 20 L10 20 M4 20 L4 14" stroke="#00f2fe" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    """,
+}
+SVG_CURSORS["res_s"] = SVG_CURSORS["res_n"]
+SVG_CURSORS["res_w"] = SVG_CURSORS["res_e"]
+SVG_CURSORS["res_se"] = SVG_CURSORS["res_nw"]
+SVG_CURSORS["res_sw"] = SVG_CURSORS["res_ne"]
+
+
+def load_app_cursors() -> dict[str, str]:
+    """
+    Загружает курсоры. При наличии файлов в CURSORS_DIR использует их,
+    иначе отдает высокодетализированные векторные Data URI.
+    """
+    cursors: dict[str, str] = {}
+    for key, fallback_svg in SVG_CURSORS.items():
+        loaded = False
+        for ext in (".cur", ".png", ".svg"):
+            disk_file = CURSORS_DIR / f"{key}{ext}"
+            if disk_file.is_file():
+                try:
+                    mime = "image/x-icon" if ext == ".cur" else ("image/png" if ext == ".png" else "image/svg+xml")
+                    b64_content = base64.b64encode(disk_file.read_bytes()).decode("utf-8")
+                    cursors[key] = f"data:{mime};base64,{b64_content}"
+                    loaded = True
+                    break
+                except Exception:
+                    pass
+        if not loaded:
+            cursors[key] = _svg_to_data_uri(fallback_svg)
+    return cursors
+
+
+# =====================================================================
+# СИСТЕМА ЛОГИРОВАНИЯ ОБНОВЛЕНИЙ
 # =====================================================================
 def setup_update_logger() -> logging.Logger:
-    """Инициализирует выделенный логгер для подсистемы обновления (1 сессия = 1 файл)."""
     logger = logging.getLogger("VolnaUpdater")
     logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
     logger.handlers.clear()
 
-    # Перезапись файла лога при каждом запуске приложения
     file_handler = logging.FileHandler(UPDATE_LOG_FILE, mode="w", encoding="utf-8")
     formatter = logging.Formatter(
         fmt="[%(asctime)s.%(msecs)03d] [%(levelname)-8s] [%(threadName)-16s] %(message)s",
@@ -109,50 +200,32 @@ update_log = setup_update_logger()
 # ПОДСИСТЕМА АВТООБНОВЛЕНИЯ
 # =====================================================================
 def calculate_git_blob_sha(filepath: Path) -> str:
-    """
-    Вычисляет Git Object SHA-1 хеш: sha1("blob " + filesize + "\0" + content).
-    Именно этот формат возвращает GitHub Contents API в поле 'sha'.
-    """
     if not filepath.is_file():
-        update_log.warning(f"Файл для расчета хеша не найден: {filepath}")
         return ""
     try:
         size = filepath.stat().st_size
         h = hashlib.sha1()
         h.update(f"blob {size}\0".encode("utf-8"))
-        
         with open(filepath, "rb") as f:
             while chunk := f.read(65536):
                 h.update(chunk)
-                
-        calculated_sha = h.hexdigest()
-        update_log.debug(f"Хеш Git Blob для '{filepath.name}' ({size} байт): {calculated_sha}")
-        return calculated_sha
+        return h.hexdigest()
     except Exception as exc:
-        update_log.error(f"Сбой при расчете Git Blob хеша файла {filepath}: {exc}", exc_info=True)
+        update_log.error(f"Сбой при расчете хеша {filepath}: {exc}")
         return ""
 
 
 def apply_update_and_restart(new_exe_path: Path) -> None:
-    """
-    Генерирует и запускает batch-скрипт, замещающий текущий бинарник новым файлом.
-    Осуществляет мониторинг завершения процесса по PID и очистку окружения PyInstaller.
-    """
-    update_log.info("Запуск процедуры применения обновления и перезапуска...")
+    update_log.info("Запуск процедуры применения обновления...")
     current_exe = Path(sys.executable)
 
     if not getattr(sys, "frozen", False):
-        update_log.info(
-            f"[DEV MODE] Приложение запущено из исходников (python main.py). "
-            f"Физическая замена '{current_exe.name}' отменена для защиты среды разработчика."
-        )
+        update_log.info("[DEV MODE] Физическая замена бинарника отменена.")
         return
 
     pid = os.getpid()
     updater_bat = DATA_DIR / "_apply_update.bat"
-    update_log.info(f"Формирование служебного скрипта обновления: {updater_bat.name} (Целевой PID: {pid})")
 
-    # Скрипт ожидает завершения текущего процесса, сбрасывает PyInstaller ENV и перезапускает .exe
     bat_script = f"""@echo off
 chcp 65001 >nul
 cd /d "%~dp0"
@@ -165,13 +238,11 @@ if not errorlevel 1 (
     goto wait_loop
 )
 
-:: Сброс служебных дескрипторов загрузчика PyInstaller
 set _MEIPASS2=
 set _PYI_ARCHIVE_FILE=
 set _PYI_APPLICATION_HOME_DIR=
 set _PYI_SPLASH_IPC=
 
-:: Замена бинарника с повторными попытками при файловых блокировках
 move /y "{new_exe_path.name}" "{current_exe.name}" >nul
 if errorlevel 1 (
     timeout /t 1 /nobreak >nul
@@ -179,168 +250,91 @@ if errorlevel 1 (
     del /f /q "{new_exe_path.name}" >nul
 )
 
-:: Запуск обновленного приложения
 start "" "{current_exe.name}"
-
-:: Удаление самого bat-файла
 del "%~f0"
 """
-
     try:
         with open(updater_bat, "w", encoding="utf-8") as f:
             f.write(bat_script)
-        update_log.info("Служебный batch-скрипт успешно записан на диск.")
 
-        # Очистка текущих переменных окружения для дочернего интерпретатора cmd
-        clean_env = {
-            k: v for k, v in os.environ.items()
-            if not k.startswith("_PYI") and k != "_MEIPASS2"
-        }
-
-        update_log.info("Старт внешнего процесса cmd.exe с флагом CREATE_NO_WINDOW...")
+        clean_env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI") and k != "_MEIPASS2"}
         subprocess.Popen(
             ["cmd.exe", "/c", str(updater_bat)],
             env=clean_env,
             creationflags=0x08000000 if sys.platform == "win32" else 0,
             close_fds=True
         )
-        update_log.info("Основной процесс завершает работу для выполнения горячей замены (os._exit).")
         os._exit(0)
     except Exception as exc:
-        update_log.critical(f"Критическая ошибка при запуске batch-обновления: {exc}", exc_info=True)
+        update_log.critical(f"Критическая ошибка обновления: {exc}")
 
 
 def check_and_apply_pending_update() -> bool:
-    """
-    Проверяет наличие отложенного обновления при старте клиента.
-    Если файл найден и валиден — мгновенно применяет его до загрузки UI.
-    """
-    update_log.info("Проверка наличия отложенного обновления (update_pending.exe)...")
     if not PENDING_UPDATE_FILE.exists():
-        update_log.info("Отложенных обновлений не обнаружено. Продолжение штатного запуска.")
         return False
 
-    update_log.info("Обнаружен файл отложенного обновления. Проверка размера и доступности...")
     size = PENDING_UPDATE_FILE.stat().st_size
-    if size < 1024 * 1024:  # Полноценный бинарник не может весить меньше 1 МБ
-        update_log.warning(f"Файл {PENDING_UPDATE_FILE.name} поврежден или имеет подозрительный размер ({size} байт). Удаление.")
+    if size < 1024 * 1024:
         PENDING_UPDATE_FILE.unlink(missing_ok=True)
         return False
 
     if not getattr(sys, "frozen", False):
-        update_log.info("[DEV MODE] Отложенное обновление обнаружено, но замена пропущена (режим разработки).")
         return False
 
-    update_log.info("Отложенное обновление валидно. Переход к тихой установке...")
     apply_update_and_restart(PENDING_UPDATE_FILE)
     return True
 
 
 class AutoUpdater(threading.Thread):
-    """Фоновый воркер опроса GitHub API, скачивания и верификации релизов."""
-    
     def __init__(self) -> None:
         super().__init__(name="UpdaterThread", daemon=True)
         self.remote_sha: str = ""
         self.download_url: str = ""
 
     def run(self) -> None:
-        update_log.info("Поток фонового обновления запущен. Задержка 3.5 сек перед первым запросом...")
         time.sleep(3.5)
-
         try:
             current_exe = Path(sys.executable) if getattr(sys, "frozen", False) else (DATA_DIR / "dist" / "main.exe")
-            update_log.info(f"Локальный исполняемый файл: {current_exe}")
-
             local_sha = calculate_git_blob_sha(current_exe) if current_exe.exists() else ""
-            update_log.info(f"Текущий локальный хеш:  {local_sha or 'ОТСУТСТВУЕТ'}")
 
-            update_log.info(f"Запрос метаданных к GitHub API: {GITHUB_API_EXE_URL}")
             ctx = ssl.create_default_context()
             req = urllib.request.Request(
                 GITHUB_API_EXE_URL,
-                headers={
-                    "User-Agent": "Volna-Client-Updater",
-                    "Accept": "application/vnd.github.v3+json"
-                }
+                headers={"User-Agent": "Volna-Client-Updater", "Accept": "application/vnd.github.v3+json"}
             )
-
             with urllib.request.urlopen(req, timeout=10.0, context=ctx) as resp:
-                status = resp.status
-                raw_body = resp.read().decode("utf-8")
-                update_log.info(f"Ответ GitHub API получен. HTTP Status: {status}")
-                meta = json.loads(raw_body)
+                meta = json.loads(resp.read().decode("utf-8"))
 
             self.remote_sha = meta.get("sha", "")
             self.download_url = meta.get("download_url", "")
-            file_size = meta.get("size", 0)
 
-            update_log.info(f"Удаленный Git SHA:      {self.remote_sha}")
-            update_log.info(f"Размер файла на сервере: {file_size} байт")
-            update_log.info(f"URL прямой загрузки:    {self.download_url}")
-
-            if not self.remote_sha or not self.download_url:
-                update_log.warning("В ответе GitHub API отсутствует 'sha' или 'download_url'. Обновление остановлено.")
+            if not self.remote_sha or not self.download_url or local_sha == self.remote_sha:
                 return
 
-            if local_sha == self.remote_sha:
-                update_log.info("Хеши полностью совпадают. Установлена актуальная версия приложения.")
-                return
-
-            update_log.info("ОБНАРУЖЕНА НОВАЯ ВЕРСИЯ! Локальный и удаленный хеши различаются. Начинается загрузка...")
             self._download_and_verify()
-
-        except urllib.error.HTTPError as http_err:
-            if http_err.code == 403:
-                update_log.error("Превышен лимит запросов GitHub API (Rate Limit Exceeded: 60 запр/час).")
-            else:
-                update_log.error(f"Сетевая ошибка HTTP при проверке обновления: {http_err.code} {http_err.reason}")
         except Exception as exc:
-            update_log.error(f"Непредвиденная ошибка при проверке обновления: {exc}", exc_info=True)
+            update_log.error(f"Ошибка проверки обновления: {exc}")
 
     def _download_and_verify(self) -> None:
-        """Потоковая загрузка бинарника с валидацией контрольной суммы."""
         temp_dest = PENDING_UPDATE_FILE
-        update_log.info(f"Целевой файл для скачивания: {temp_dest}")
-
         try:
-            req = urllib.request.Request(self.download_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-            start_time = time.time()
-            downloaded_bytes = 0
-
+            req = urllib.request.Request(self.download_url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=90.0) as resp, open(temp_dest, "wb") as out_file:
                 while chunk := resp.read(65536):
                     out_file.write(chunk)
-                    downloaded_bytes += len(chunk)
 
-            duration = time.time() - start_time
-            update_log.info(
-                f"Загрузка завершена: получено {downloaded_bytes} байт за {duration:.2f} сек. "
-                f"({downloaded_bytes / 1024 / 1024 / max(duration, 0.001):.2f} МБ/с)"
-            )
-
-            # Валидация скачанного файла
-            update_log.info("Запуск валидации целостности полученного файла...")
-            downloaded_sha = calculate_git_blob_sha(temp_dest)
-            update_log.info(f"Хеш скачанного файла:  {downloaded_sha}")
-            update_log.info(f"Ожидаемый удаленный:   {self.remote_sha}")
-
-            if downloaded_sha != self.remote_sha:
-                update_log.critical("НЕСООТВЕТСТВИЕ ХЕШЕЙ! Скачанный файл поврежден. Удаление файла.")
+            if calculate_git_blob_sha(temp_dest) != self.remote_sha:
                 temp_dest.unlink(missing_ok=True)
                 return
 
-            update_log.info("Валидация успешна! Хеши идентичны. Отображение модального окна обновления (update.html)...")
             show_update_window()
-
         except Exception as exc:
-            update_log.error(f"Сбой в процессе загрузки бинарного обновления: {exc}", exc_info=True)
-            if temp_dest.exists():
-                temp_dest.unlink(missing_ok=True)
+            update_log.error(f"Сбой загрузки обновления: {exc}")
+            temp_dest.unlink(missing_ok=True)
 
 
 # =====================================================================
-# WIN32 ГРАФИЧЕСКАЯ МАСКА И ОКНА PYWEBVIEW
+# WIN32 МАСКА И ОКНА
 # =====================================================================
 TOAST_W, TOAST_H = 340, 110
 MODAL_W, MODAL_H = 430, 160
@@ -354,7 +348,6 @@ last_toast_payload: dict[str, Any] = {}
 
 
 def apply_pixel_perfect_mask(hwnd: int, radius_css: int = 20) -> None:
-    """Аппаратно отсекает острые углы у окна и дочерних слоев WebView2."""
     if sys.platform != "win32" or not hwnd:
         return
 
@@ -385,8 +378,8 @@ def apply_pixel_perfect_mask(hwnd: int, radius_css: int = 20) -> None:
             user32.SetWindowRgn(child_hwnd, c_rgn, True)
         return True
 
-    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-    user32.EnumChildWindows(hwnd, WNDENUMPROC(_enum_children), 0)
+    wnd_proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)(_enum_children)
+    user32.EnumChildWindows(hwnd, wnd_proc, 0)
 
 
 def get_screen_resolution() -> tuple[int, int]:
@@ -404,7 +397,6 @@ def set_taskbar_visibility(visible: bool) -> None:
 
 
 def show_toast_window(msg_payload: dict[str, Any]) -> None:
-    """Отображает уведомление в правом нижнем углу над панелью задач."""
     global toast_timer, last_toast_payload
     if not toast_window:
         return
@@ -432,8 +424,6 @@ def show_toast_window(msg_payload: dict[str, Any]) -> None:
             ctypes.windll.user32.SetWindowPos(
                 hwnd, HWND_TOPMOST, target_x, target_y, TOAST_W, TOAST_H, SWP_NOACTIVATE | SWP_SHOWWINDOW
             )
-            threading.Timer(0.04, lambda: apply_pixel_perfect_mask(hwnd, radius_css=20)).start()
-            threading.Timer(0.12, lambda: apply_pixel_perfect_mask(hwnd, radius_css=20)).start()
 
     toast_timer = threading.Timer(5.5, hide_toast_window)
     toast_timer.daemon = True
@@ -446,10 +436,7 @@ def hide_toast_window() -> None:
 
 
 def show_update_window() -> None:
-    """Отображает центрированное окно предложения обновления."""
-    update_log.info("Отображение модального окна обновления пользователю.")
     if not update_window:
-        update_log.warning("Окно update_window не инициализировано.")
         return
 
     sw, sh = get_screen_resolution()
@@ -467,8 +454,6 @@ def show_update_window() -> None:
                 hwnd, HWND_TOPMOST, target_x, target_y, MODAL_W, MODAL_H, SWP_SHOWWINDOW
             )
             ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
-            threading.Timer(0.04, lambda: apply_pixel_perfect_mask(hwnd, radius_css=20)).start()
-            threading.Timer(0.12, lambda: apply_pixel_perfect_mask(hwnd, radius_css=20)).start()
 
 
 def hide_update_window() -> None:
@@ -476,9 +461,6 @@ def hide_update_window() -> None:
         update_window.hide()
 
 
-# =====================================================================
-# JS-API ДЛЯ ВСПЛЫВАЮЩИХ И МОДАЛЬНЫХ ОКОН
-# =====================================================================
 class ToastJsApi:
     def py_get_toast_payload(self) -> dict[str, Any]:
         return last_toast_payload
@@ -493,22 +475,15 @@ class ToastJsApi:
 
 class UpdateJsApi:
     def py_apply_update(self) -> None:
-        """Пользователь нажал 'Установить сейчас'."""
-        update_log.info("Пользователь выбрал 'Установить сейчас' в модальном окне.")
         hide_update_window()
         apply_update_and_restart(PENDING_UPDATE_FILE)
 
     def py_dismiss_update(self) -> None:
-        """Пользователь нажал 'Позже'."""
-        update_log.info(
-            "Пользователь нажал 'Позже'. Файл обновления сохранен как 'update_pending.exe'. "
-            "Замена выполнится автоматически при следующем старте программы."
-        )
         hide_update_window()
 
 
 # =====================================================================
-# РЕСУРСЫ, ИКОНКИ И КОНФИГУРАЦИЯ МЕССЕНДЖЕРА
+# РЕСУРСЫ, ИКОНКИ И КОНФИГУРАЦИЯ
 # =====================================================================
 def ensure_app_icons() -> Image.Image:
     img = Image.new("RGBA", (256, 256), color=(0, 0, 0, 0))
@@ -518,11 +493,7 @@ def ensure_app_icons() -> Image.Image:
     draw.arc((50, 105, 206, 205), start=180, end=360, fill="#4dc6ff", width=16)
     try:
         img.save(ICON_PNG_PATH, format="PNG")
-        img.save(
-            ICON_ICO_PATH,
-            format="ICO",
-            sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-        )
+        img.save(ICON_ICO_PATH, format="ICO", sizes=[(16, 16), (32, 32), (64, 64), (128, 128)])
     except Exception:
         pass
     return img
@@ -574,8 +545,33 @@ def run_js(js_code: str) -> None:
             pass
 
 
+def toggle_local_reaction(msg_id: str, emoji: str, user_nickname: str) -> dict[str, list[str]]:
+    """Локально переключает реакцию у сообщения в истории и возвращает обновленный словарь."""
+    global cached_history
+    updated_dict: dict[str, list[str]] = {}
+    for m in cached_history:
+        target_id = m.get("id") or m.get("file_id")
+        if target_id == msg_id:
+            if "reactions" not in m or not isinstance(m["reactions"], dict):
+                m["reactions"] = {}
+            rx: dict[str, list[str]] = m["reactions"]
+            user_list = rx.get(emoji, [])
+            if user_nickname in user_list:
+                user_list.remove(user_nickname)
+                if not user_list:
+                    rx.pop(emoji, None)
+                else:
+                    rx[emoji] = user_list
+            else:
+                user_list.append(user_nickname)
+                rx[emoji] = user_list
+            updated_dict = rx
+            break
+    return updated_dict
+
+
 # =====================================================================
-# СЕТЕВОЙ КЛИЕНТ
+# СЕТЕВОЙ КЛИЕНТ С ПОДДЕРЖКОЙ РЕАКЦИЙ
 # =====================================================================
 class NetworkWorker(threading.Thread):
     def __init__(self, nickname: str) -> None:
@@ -638,18 +634,27 @@ class NetworkWorker(threading.Thread):
                     case "history":
                         global cached_history
                         cached_history = msg.get("messages", [])
+                        for item in cached_history:
+                            if "reactions" not in item:
+                                item["reactions"] = {}
                         payload = json.dumps(cached_history)
                         run_js(f"window.js_load_history({payload});")
                         for m in cached_history:
                             if m.get("action") == "file":
                                 self._auto_download_if_needed(m.get("file_id"), m.get("filename"))
                     case "msg":
+                        if "id" not in msg:
+                            msg["id"] = f"msg_{int(time.time() * 1000)}_{random.randint(100, 999)}"
+                        if "reactions" not in msg:
+                            msg["reactions"] = {}
                         cached_history.append(msg)
                         payload = json.dumps(msg)
                         run_js(f"window.js_add_message({payload});")
                         if not is_window_focused and msg.get("sender") != self.nickname:
                             show_toast_window(msg)
                     case "file":
+                        if "reactions" not in msg:
+                            msg["reactions"] = {}
                         cached_history.append(msg)
                         payload = json.dumps(msg)
                         run_js(f"window.js_add_message({payload});")
@@ -659,6 +664,20 @@ class NetworkWorker(threading.Thread):
                             if local_p.exists():
                                 msg["content_url"] = str(local_p).replace("\\", "/")
                             show_toast_window(msg)
+                    case "reaction" | "reactions_update":
+                        target_id = msg.get("msg_id") or msg.get("file_id") or msg.get("id")
+                        if not target_id:
+                            continue
+                        reactions_map = msg.get("reactions")
+                        if isinstance(reactions_map, dict):
+                            for m in cached_history:
+                                if m.get("id") == target_id or m.get("file_id") == target_id:
+                                    m["reactions"] = reactions_map
+                                    break
+                            run_js(f"window.js_update_reactions('{target_id}', {json.dumps(reactions_map)});")
+                        elif msg.get("emoji") and msg.get("sender"):
+                            updated = toggle_local_reaction(target_id, msg["emoji"], msg["sender"])
+                            run_js(f"window.js_update_reactions('{target_id}', {json.dumps(updated)});")
             except Exception:
                 self.connected = False
                 run_js("window.js_set_connection_status(false);")
@@ -781,8 +800,32 @@ class JsApi:
         return {
             "nickname": config.nickname,
             "connected": worker.connected,
-            "history": cached_history
+            "history": cached_history,
+            "custom_cursors": load_app_cursors()
         }
+
+    def py_get_custom_cursors(self) -> dict[str, str]:
+        return load_app_cursors()
+
+    def py_toggle_reaction(self, msg_id: str, emoji: str) -> dict[str, list[str]]:
+        """Обработка добавления/снятия реакции пользователем."""
+        if not msg_id or not emoji:
+            return {}
+
+        # 1. Мгновенно обновляем локальный стейт (Optimistic UI)
+        updated_reactions = toggle_local_reaction(msg_id, emoji, config.nickname)
+        run_js(f"window.js_update_reactions('{msg_id}', {json.dumps(updated_reactions)});")
+
+        # 2. Оповещаем сервер / сеть
+        worker.send({
+            "action": "reaction",
+            "msg_id": msg_id,
+            "file_id": msg_id,
+            "emoji": emoji,
+            "sender": config.nickname,
+            "reactions": updated_reactions
+        })
+        return updated_reactions
 
     def py_get_window_bounds(self) -> dict[str, int]:
         if main_window:
@@ -829,9 +872,18 @@ class JsApi:
             worker.send({"action": "register", "nickname": nick})
 
     def py_send_text(self, text: str) -> None:
-        if not text.strip():
+        clean = text.strip()
+        if not clean:
             return
-        worker.send({"action": "msg", "text": text, "time": time.strftime("%H:%M")})
+        msg_id = f"msg_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+        worker.send({
+            "action": "msg",
+            "id": msg_id,
+            "text": clean,
+            "time": time.strftime("%H:%M"),
+            "sender": config.nickname,
+            "reactions": {}
+        })
 
     def py_select_and_send_file(self) -> None:
         def _picker() -> None:
@@ -848,11 +900,16 @@ class JsApi:
             with open(filepath, "rb") as f:
                 b64_data = base64.b64encode(f.read()).decode("utf-8")
 
+            file_id = f"file_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
             worker.send({
                 "action": "file_upload",
+                "id": file_id,
+                "file_id": file_id,
                 "filename": filename,
                 "content": b64_data,
-                "time": time.strftime("%H:%M")
+                "time": time.strftime("%H:%M"),
+                "sender": config.nickname,
+                "reactions": {}
             })
 
         threading.Thread(target=_picker, daemon=True).start()
@@ -860,11 +917,16 @@ class JsApi:
     def py_upload_base64_file(self, filename: str, content_b64: str) -> None:
         if not filename or not content_b64:
             return
+        file_id = f"file_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
         worker.send({
             "action": "file_upload",
+            "id": file_id,
+            "file_id": file_id,
             "filename": filename,
             "content": content_b64,
-            "time": time.strftime("%H:%M")
+            "time": time.strftime("%H:%M"),
+            "sender": config.nickname,
+            "reactions": {}
         })
 
     def py_open_file(self, filepath: str) -> None:
@@ -911,7 +973,6 @@ def restore_window() -> None:
 
 def quit_application() -> None:
     global tray_icon
-    update_log.info("Завершение работы приложения пользователем.")
     worker.running = False
     if tray_icon:
         tray_icon.stop()
@@ -938,25 +999,15 @@ def setup_tray() -> None:
 # ТОЧКА ВХОДА (ENTRYPOINT)
 # =====================================================================
 if __name__ == "__main__":
-    update_log.info("=" * 70)
-    update_log.info(f"СТАРТ СЕССИИ МЕССЕНДЖЕРА 'ВОЛНА' (PID: {os.getpid()})")
-    update_log.info(f"Платформа: {sys.platform} | Python: {sys.version.split()[0]}")
-    update_log.info(f"Режим сборки (frozen): {getattr(sys, 'frozen', False)}")
-    update_log.info(f"Рабочая директория (DATA_DIR): {DATA_DIR}")
-    update_log.info("=" * 70)
-
-    # 1. Проверка отложенного обновления от прошлого запуска (если юзер нажимал "Позже")
     if check_and_apply_pending_update():
         sys.exit(0)
 
-    # 2. Запуск фоновых сервисов
     worker.start()
     threading.Thread(target=setup_tray, daemon=True, name="TrayThread").start()
     AutoUpdater().start()
 
     sw, sh = get_screen_resolution()
 
-    # 3. Инициализация окон PyWebView
     main_window = webview.create_window(
         title="ВОЛНА — Мессенджер",
         url=str((WEB_DIR / "index.html").resolve()),
@@ -1010,5 +1061,4 @@ if __name__ == "__main__":
 
     threading.Thread(target=_welcome, daemon=True, name="WelcomeToast").start()
 
-    # 4. Запуск цикла событий графического интерфейса
     webview.start(debug=DEBUG)

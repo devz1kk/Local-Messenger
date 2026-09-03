@@ -44,7 +44,7 @@ body{
 button{font-family:inherit;color:inherit;background:none;border:none;outline:none}
 input,textarea{font-family:inherit;color:inherit}
 
-/* Нативные зоны ресайза */
+/* Зоны ресайза */
 .res-handle{position:fixed;z-index:99999}
 .res-n{top:0;left:12px;right:12px;height:7px;cursor:n-resize}
 .res-s{bottom:0;left:12px;right:12px;height:7px;cursor:s-resize}
@@ -55,7 +55,6 @@ input,textarea{font-family:inherit;color:inherit}
 .res-sw{bottom:0;left:0;width:14px;height:14px;cursor:sw-resize}
 .res-se{bottom:0;right:0;width:14px;height:14px;cursor:se-resize}
 
-/* Улучшенный анимированный неоновый фон */
 #bgfx{position:fixed;inset:0;z-index:0;opacity:.95;pointer-events:none}
 .glow{position:fixed;border-radius:50%;filter:blur(130px);z-index:0;pointer-events:none}
 .g1{
@@ -93,7 +92,6 @@ input,textarea{font-family:inherit;color:inherit}
 
 .app{position:relative;z-index:2;display:flex;height:100vh;flex-direction:column}
 
-/* Шапка с эффектом Glassmorphism */
 .topbar{
   display:flex;align-items:center;justify-content:space-between;padding:14px 24px;
   background:rgba(8, 14, 26, 0.78);
@@ -162,13 +160,13 @@ input,textarea{font-family:inherit;color:inherit}
 .wbtn:hover{color:#fff;background:var(--panel3);border-color:var(--acc2);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
 .wbtn.close:hover{background:var(--coral);color:#fff;border-color:var(--coral);box-shadow:0 0 16px rgba(255,94,126,.5)}
 
-/* Область чата */
+/* Область сообщений */
 .chat-viewport{flex:1;position:relative;display:flex;overflow:hidden}
 
 .msgs{
   flex:1;overflow-y:overlay;overflow-x:hidden;
-  padding:28px 24px;
-  display:flex;flex-direction:column;gap:16px;
+  padding:42px 24px 28px; /* Достаточный отступ сверху, чтобы hover-панель никогда не срезалась */
+  display:flex;flex-direction:column;gap:18px;
   position:relative;scroll-behavior:smooth;
   scrollbar-width:thin;
   scrollbar-color:rgba(0, 242, 254, 0.35) transparent;
@@ -186,7 +184,6 @@ input,textarea{font-family:inherit;color:inherit}
   box-shadow:0 0 10px var(--acc);
 }
 
-/* Кнопка скролла */
 .scroll-bottom-btn{
   position:absolute;right:28px;bottom:20px;width:44px;height:44px;border-radius:50%;
   background:rgba(13, 24, 44, 0.85);border:1px solid var(--line2);color:var(--acc);
@@ -202,10 +199,8 @@ input,textarea{font-family:inherit;color:inherit}
   box-shadow:0 0 20px rgba(0,242,254,.6);
   transform:translateY(-3px) scale(1.08);
 }
-.scroll-bottom-btn svg{transition:transform .2s ease}
-.scroll-bottom-btn:hover svg{transform:translateY(2px)}
 
-/* Сообщения & Стилизация пузырей */
+/* Пузыри сообщений */
 .msg-wrap{
   position:relative;display:flex;flex-direction:column;max-width:min(700px,82%);
   animation:msgSpring .35s cubic-bezier(.175,.885,.32,1.275) forwards;
@@ -240,9 +235,6 @@ input,textarea{font-family:inherit;color:inherit}
   backdrop-filter:blur(14px);
   font-weight:500;
 }
-.bubble:hover{
-  transform:translateY(-1px);
-}
 
 .sender-name{
   font-size:12px;font-weight:800;margin-bottom:6px;
@@ -256,7 +248,6 @@ input,textarea{font-family:inherit;color:inherit}
 }
 .msg-wrap.me .meta-time{color:rgba(215, 250, 255, 0.75)}
 
-/* Ссылки */
 .msg-wrap.them a, .msg-wrap.me a{
   color:var(--acc) !important;text-decoration:none;font-weight:600;
   border-bottom:1px dashed var(--acc);padding-bottom:1px;
@@ -281,58 +272,40 @@ input,textarea{font-family:inherit;color:inherit}
   transform:translateX(5px);
   box-shadow:0 6px 20px rgba(0,0,0,0.4), 0 0 15px rgba(0,242,254,0.2);
 }
-.msg-wrap.me .linkcard{background:rgba(5, 22, 36, 0.6);border-left-color:var(--acc)}
 .link-title{font-weight:700;font-size:13.5px;color:var(--acc2)}
 .link-domain{font-family:'JetBrains Mono';font-size:11px;color:var(--dim)}
 .link-desc{font-size:12.5px;color:var(--mut);line-height:1.35}
 
-/* Медиа контент */
+/* Медиа & Файлы */
 .tg-media{
   margin-top:6px;border-radius:16px;overflow:hidden;max-width:520px;width:fit-content;
   position:relative;background:rgba(0,0,0,.35);border:1px solid var(--line2);
   min-height:40px;box-shadow:0 8px 24px rgba(0,0,0,0.3);
-  transition:transform .3s ease, box-shadow .3s ease;
-}
-.tg-media:hover{
-  box-shadow:0 12px 30px rgba(0,0,0,0.5), 0 0 20px rgba(0,242,254,0.15);
 }
 .tg-media img{
   display:block;max-width:100%;max-height:540px;width:auto;height:auto;
-  object-fit:contain;border-radius:14px;transition:transform .3s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor:pointer;
+  object-fit:contain;border-radius:14px;cursor:pointer;
 }
-.tg-media img:hover{transform:scale(1.02)}
 .tg-media video{display:block;max-width:100%;max-height:540px;border-radius:14px;outline:none}
 audio{margin-top:8px;width:280px;height:40px;border-radius:99px;outline:none;display:block}
 
-/* Карточки файлов */
 .file-card{
   display:flex;flex-direction:column;gap:10px;background:rgba(9, 17, 32, 0.7);
   border:1px solid var(--line2);padding:12px 16px;border-radius:16px;margin-top:8px;
-  min-width:280px;transition:all .3s ease;
-  box-shadow:0 6px 18px rgba(0,0,0,0.25);
+  min-width:280px;box-shadow:0 6px 18px rgba(0,0,0,0.25);
 }
-.file-card:hover{
-  background:rgba(15, 27, 48, 0.85);
-  border-color:var(--acc2);
-  transform:translateY(-2px);
-  box-shadow:0 10px 25px rgba(0,0,0,0.4), 0 0 15px rgba(79,172,254,0.2);
-}
-.msg-wrap.me .file-card{background:rgba(6, 26, 40, 0.6)}
 .file-row{display:flex;align-items:center;gap:12px}
-.file-icon{font-size:24px;flex:none;filter:drop-shadow(0 2px 6px rgba(0,242,254,0.4))}
+.file-icon{font-size:24px;flex:none}
 .file-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
 .file-acts{display:flex;gap:8px}
 .fbtn{
   font-size:12px;font-weight:700;padding:5px 12px;border-radius:8px;
-  background:rgba(120,180,255,.14);transition:all .25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  cursor:pointer;border:1px solid rgba(120,180,255,.2);
+  background:rgba(120,180,255,.14);cursor:pointer;border:1px solid rgba(120,180,255,.2);
+  transition:all .25s ease;
 }
 .fbtn:hover{
   background:linear-gradient(135deg, var(--acc), var(--acc2));
-  color:#041a1a;border-color:transparent;
-  transform:scale(1.05) translateY(-1px);
-  box-shadow:0 4px 12px rgba(0,242,254,0.4);
+  color:#041a1a;border-color:transparent;transform:scale(1.05);
 }
 
 .pbar-wrap{height:5px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden;position:relative}
@@ -347,47 +320,81 @@ audio{margin-top:8px;width:280px;height:40px;border-radius:99px;outline:none;dis
   100%{transform:translateX(100%)}
 }
 
-/* Реакции & Floating Bar */
+/* =====================================================================
+   ИСПРАВЛЕННЫЙ БЛОК РЕАКЦИЙ: ВСПЛЫВАЮЩАЯ ПАНЕЛЬ И ПИЛЮЛИ
+   ===================================================================== */
 .racts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
 .rpill{
-  display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:3px 10px;
-  border-radius:99px;background:rgba(12, 22, 38, 0.7);border:1px solid var(--line2);
+  display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:3px 10px;
+  border-radius:99px;background:rgba(12, 22, 38, 0.75);border:1px solid var(--line2);
   transition:all .25s cubic-bezier(0.34, 1.56, 0.64, 1);cursor:pointer;
   backdrop-filter:blur(8px);
 }
 .rpill:hover{
   transform:scale(1.15) translateY(-2px);
-  background:rgba(25, 42, 70, 0.85);
+  background:rgba(25, 42, 70, 0.9);
   box-shadow:0 4px 12px rgba(0,0,0,0.3);
 }
 .rpill.mine{
-  border-color:var(--acc);background:rgba(0,242,254,.18);
-  box-shadow:0 0 12px rgba(0,242,254,.35);
+  border-color:var(--acc);background:rgba(0,242,254,.22);
+  box-shadow:0 0 12px rgba(0,242,254,.4);
   color:#fff;
 }
 
+/* ПАНЕЛЬ ВЫБОРА: Адаптивное позиционирование против вылета за экран */
 .rx-hover-bar{
-  position:absolute;top:-40px;right:8px;display:none;align-items:center;gap:4px;
-  padding:4px 8px;border-radius:99px;
-  background:rgba(12, 20, 36, 0.92);
+  position:absolute;
+  top:-38px;
+  display:none;
+  align-items:center;
+  gap:4px;
+  padding:4px 8px;
+  border-radius:99px;
+  background:rgba(12, 20, 36, 0.94);
   border:1px solid var(--line2);
-  box-shadow:0 10px 30px rgba(0,0,0,.6), 0 0 15px rgba(0,242,254,.15);
-  z-index:20;backdrop-filter:blur(16px);
-  animation:rxBarPop .25s cubic-bezier(.175,.885,.32,1.275);
+  box-shadow:0 10px 30px rgba(0,0,0,.7), 0 0 16px rgba(0,242,254,.25);
+  z-index:90;
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  animation:rxBarPop .22s cubic-bezier(.175,.885,.32,1.275);
+  white-space:nowrap;
 }
 @keyframes rxBarPop{
-  from{opacity:0;transform:translateY(10px) scale(0.8)}
+  from{opacity:0;transform:translateY(8px) scale(0.85)}
   to{opacity:1;transform:translateY(0) scale(1)}
 }
-.msg-wrap:hover .rx-hover-bar{display:flex}
+
+/* Ключевое исправление: входящие крепятся слева (раскрываются вправо), исходящие - справа */
+.msg-wrap.them .rx-hover-bar{
+  left:0;
+  right:auto;
+}
+.msg-wrap.me .rx-hover-bar{
+  right:0;
+  left:auto;
+}
+
+.msg-wrap:hover .rx-hover-bar{
+  display:flex;
+}
+
 .rx-hover-bar button{
-  font-size:16px;width:30px;height:30px;border-radius:50%;
-  display:grid;place-items:center;transition:all .2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-size:18px;
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  transition:transform .2s cubic-bezier(0.34, 1.56, 0.64, 1), background .2s ease;
   cursor:pointer;
 }
 .rx-hover-bar button:hover{
-  background:rgba(255,255,255,0.1);
-  transform:scale(1.35) translateY(-3px);
+  background:rgba(0, 242, 254, 0.2);
+  transform:scale(1.4) translateY(-3px);
+  box-shadow:0 4px 10px rgba(0,242,254,0.3);
+}
+.rx-hover-bar button:active{
+  transform:scale(1.1);
 }
 
 /* Композер */
@@ -418,12 +425,8 @@ audio{margin-top:8px;width:280px;height:40px;border-radius:99px;outline:none;dis
 .cbtn{
   width:40px;height:40px;border-radius:14px;display:grid;place-items:center;
   color:var(--mut);transition:all .25s ease;flex:none;cursor:pointer;
-  border:1px solid transparent;
 }
-.cbtn:hover{
-  color:var(--acc);background:var(--panel3);border-color:var(--line2);
-  transform:translateY(-2px) scale(1.05);
-}
+.cbtn:hover{color:var(--acc);background:var(--panel3);transform:translateY(-2px) scale(1.05)}
 .send-btn{
   width:44px;height:44px;border-radius:14px;
   background:linear-gradient(135deg, var(--acc) 0%, var(--acc2) 100%);
@@ -431,39 +434,21 @@ audio{margin-top:8px;width:280px;height:40px;border-radius:99px;outline:none;dis
   transition:all .3s cubic-bezier(0.34, 1.56, 0.64, 1);flex:none;cursor:pointer;
   box-shadow:0 4px 15px rgba(0,242,254,.35);
 }
-.send-btn:hover{
-  transform:scale(1.1) translateY(-2px);
-  box-shadow:0 8px 25px rgba(0,242,254,.55);
-}
-.send-btn:active{
-  transform:scale(0.95);
-}
+.send-btn:hover{transform:scale(1.1) translateY(-2px);box-shadow:0 8px 25px rgba(0,242,254,.55)}
+.send-btn:active{transform:scale(0.95)}
 
-/* Drag and Drop */
 #dropOverlay{
   position:fixed;inset:0;
   background:rgba(4, 8, 18, 0.85);
   backdrop-filter:blur(20px);
   z-index:999;display:none;place-items:center;pointer-events:none;
   border:3px dashed var(--acc);margin:14px;border-radius:24px;
-  box-shadow:inset 0 0 50px rgba(0,242,254,0.2);
-  animation:overlayPulse 2s infinite alternate;
-}
-@keyframes overlayPulse{
-  from{border-color:var(--acc);box-shadow:inset 0 0 30px rgba(0,242,254,0.15)}
-  to{border-color:var(--acc2);box-shadow:inset 0 0 60px rgba(79,172,254,0.3)}
 }
 #dropOverlay.active{display:grid}
-.drop-card{text-align:center;color:var(--ink);transform:scale(1.05);transition:transform .3s ease}
-.drop-card svg{color:var(--acc);margin-bottom:14px;filter:drop-shadow(0 0 15px var(--acc));animation:bounce 1.2s infinite alternate}
-.drop-card h3{font-family:'Unbounded';font-size:24px;margin-bottom:8px;color:#fff;letter-spacing:0.02em}
-.drop-card p{font-size:15px;color:var(--mut)}
-@keyframes bounce{
-  from{transform:translateY(0) scale(1)}
-  to{transform:translateY(-14px) scale(1.1)}
-}
+.drop-card{text-align:center;color:var(--ink)}
+.drop-card svg{color:var(--acc);margin-bottom:14px;filter:drop-shadow(0 0 15px var(--acc))}
+.drop-card h3{font-family:'Unbounded';font-size:24px;margin-bottom:8px;color:#fff}
 
-/* Toast уведомления */
 #toast{
   position:fixed;bottom:30px;left:50%;transform:translate(-50%,100px);z-index:200;
   background:rgba(15, 25, 48, 0.95);border:1px solid var(--acc);
@@ -479,7 +464,6 @@ audio{margin-top:8px;width:280px;height:40px;border-radius:99px;outline:none;dis
 </head>
 <body>
 
-<!-- 8 зон растягивания окна -->
 <div class="res-handle res-n"  onmousedown="startWindowResize('n', event)"></div>
 <div class="res-handle res-s"  onmousedown="startWindowResize('s', event)"></div>
 <div class="res-handle res-e"  onmousedown="startWindowResize('e', event)"></div>
@@ -525,8 +509,6 @@ audio{margin-top:8px;width:280px;height:40px;border-radius:99px;outline:none;dis
 
   <div class="chat-viewport">
     <main class="msgs" id="msgsBox"></main>
-
-    <!-- Кнопка спуска вниз -->
     <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollToBottomSmooth()" title="Вниз к сообщениям">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
     </button>
@@ -537,7 +519,7 @@ audio{margin-top:8px;width:280px;height:40px;border-radius:99px;outline:none;dis
       <button class="cbtn" id="attachBtn" title="Прикрепить файл">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
       </button>
-      <textarea id="mtext" rows="1" placeholder="Напишите сообщение или перетащите файл... (Enter для отправки)"></textarea>
+      <textarea id="mtext" rows="1" placeholder="Напишите сообщение... (Enter для отправки)"></textarea>
       <button class="send-btn" id="sendBtn" title="Отправить">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 12 21 3l-4.5 18-5.3-7.2zM21 3 11.2 13.8"/></svg>
       </button>
@@ -563,51 +545,33 @@ function callPy(funcName, ...args) {
   return Promise.resolve(null);
 }
 
-// --- Плавное перемещение и ресайз окна ---
-let isWindowMoving = false;
-let moveStartX = 0, moveStartY = 0;
-let winStartX = 0, winStartY = 0;
-
-let isWindowResizing = false;
-let resizeDir = '';
-let resStartX = 0, resStartY = 0;
-let resWinX = 0, resWinY = 0;
-let resWinW = 0, resWinH = 0;
-
-let rafPending = false;
-let targetX = 0, targetY = 0, targetW = 0, targetH = 0;
+// ПЕРЕМЕЩЕНИЕ И РЕСАЙЗ ОКНА
+let isWindowMoving = false, moveStartX = 0, moveStartY = 0, winStartX = 0, winStartY = 0;
+let isWindowResizing = false, resizeDir = '', resStartX = 0, resStartY = 0;
+let resWinX = 0, resWinY = 0, resWinW = 0, resWinH = 0;
+let rafPending = false, targetX = 0, targetY = 0, targetW = 0, targetH = 0;
 
 function onTopBarMouseDown(e) {
   if (e.button !== 0 || e.target.closest('button, input, textarea, a, .wbtn, .nick-input, .win-ctrls')) return;
   isWindowMoving = true;
-  moveStartX = e.screenX;
-  moveStartY = e.screenY;
-  callPy('py_get_window_bounds').then(b => {
-    if (b) { winStartX = b.x; winStartY = b.y; }
-  });
+  moveStartX = e.screenX; moveStartY = e.screenY;
+  callPy('py_get_window_bounds').then(b => { if (b) { winStartX = b.x; winStartY = b.y; } });
 }
 
 function startWindowResize(dir, e) {
   if (e.button !== 0) return;
   e.preventDefault();
-  isWindowResizing = true;
-  resizeDir = dir;
-  resStartX = e.screenX;
-  resStartY = e.screenY;
+  isWindowResizing = true; resizeDir = dir;
+  resStartX = e.screenX; resStartY = e.screenY;
   callPy('py_get_window_bounds').then(b => {
-    if (b) {
-      resWinX = b.x; resWinY = b.y;
-      resWinW = b.w; resWinH = b.h;
-    }
+    if (b) { resWinX = b.x; resWinY = b.y; resWinW = b.w; resWinH = b.h; }
   });
 }
 
 window.addEventListener('mousemove', (e) => {
   if (isWindowMoving) {
-    const dx = e.screenX - moveStartX;
-    const dy = e.screenY - moveStartY;
-    targetX = winStartX + dx;
-    targetY = winStartY + dy;
+    targetX = winStartX + (e.screenX - moveStartX);
+    targetY = winStartY + (e.screenY - moveStartY);
     if (!rafPending) {
       rafPending = true;
       requestAnimationFrame(() => {
@@ -615,12 +579,9 @@ window.addEventListener('mousemove', (e) => {
         rafPending = false;
       });
     }
-  } 
-  else if (isWindowResizing) {
-    const dx = e.screenX - resStartX;
-    const dy = e.screenY - resStartY;
-    let newX = resWinX, newY = resWinY;
-    let newW = resWinW, newH = resWinH;
+  } else if (isWindowResizing) {
+    const dx = e.screenX - resStartX, dy = e.screenY - resStartY;
+    let newX = resWinX, newY = resWinY, newW = resWinW, newH = resWinH;
     const minW = 680, minH = 520;
 
     if (resizeDir.includes('e')) newW = Math.max(minW, resWinW + dx);
@@ -645,12 +606,8 @@ window.addEventListener('mousemove', (e) => {
   }
 });
 
-window.addEventListener('mouseup', () => {
-  isWindowMoving = false;
-  isWindowResizing = false;
-});
+window.addEventListener('mouseup', () => { isWindowMoving = false; isWindowResizing = false; });
 
-// Кнопка скролла в самый низ
 msgsBox.addEventListener('scroll', () => {
   const maxScroll = msgsBox.scrollHeight - msgsBox.clientHeight;
   if (maxScroll - msgsBox.scrollTop > 160) {
@@ -665,35 +622,33 @@ function scrollToBottomSmooth() {
   msgsBox.scrollTo({ top: msgsBox.scrollHeight, behavior: 'smooth' });
 }
 
-// Курсоры
+// =====================================================================
+// ПРИМЕНЕНИЕ КАСТОМНЫХ КУРСОРОВ С ТОЧНЫМИ HOTSPOT-КООРДИНАТАМИ
+// =====================================================================
 function applyCustomCursors(cursors) {
   if (!cursors) return;
   let css = '';
-  if (cursors.default) css += `html, body, .topbar, .brand { cursor: url('${cursors.default}'), auto !important; }\n`;
-  if (cursors.pointer) css += `button, a, .wbtn, .fbtn, .cbtn, .send-btn, .rpill, .scroll-bottom-btn, [onclick] { cursor: url('${cursors.pointer}'), pointer !important; }\n`;
-  if (cursors.text) css += `input, textarea { cursor: url('${cursors.text}'), text !important; }\n`;
-  if (cursors.res_n) css += `.res-n { cursor: url('${cursors.res_n}'), n-resize !important; }\n`;
-  if (cursors.res_s) css += `.res-s { cursor: url('${cursors.res_s}'), s-resize !important; }\n`;
-  if (cursors.res_e) css += `.res-e { cursor: url('${cursors.res_e}'), e-resize !important; }\n`;
-  if (cursors.res_w) css += `.res-w { cursor: url('${cursors.res_w}'), w-resize !important; }\n`;
-  if (cursors.res_nw) css += `.res-nw { cursor: url('${cursors.res_nw}'), nw-resize !important; }\n`;
-  if (cursors.res_ne) css += `.res-ne { cursor: url('${cursors.res_ne}'), ne-resize !important; }\n`;
-  if (cursors.res_sw) css += `.res-sw { cursor: url('${cursors.res_sw}'), sw-resize !important; }\n`;
-  if (cursors.res_se) css += `.res-se { cursor: url('${cursors.res_se}'), se-resize !important; }\n`;
+  if (cursors.default) css += `html, body, .topbar, .brand, .chat-viewport, .msgs { cursor: url('${cursors.default}') 2 2, auto !important; }\n`;
+  if (cursors.pointer) css += `button, a, .wbtn, .fbtn, .cbtn, .send-btn, .rpill, .scroll-bottom-btn, [onclick], .rx-hover-bar button, .linkcard, .tg-media img { cursor: url('${cursors.pointer}') 6 2, pointer !important; }\n`;
+  if (cursors.text) css += `input, textarea, #mtext { cursor: url('${cursors.text}') 12 12, text !important; }\n`;
+  if (cursors.res_n) css += `.res-n { cursor: url('${cursors.res_n}') 12 12, n-resize !important; }\n`;
+  if (cursors.res_s) css += `.res-s { cursor: url('${cursors.res_s}') 12 12, s-resize !important; }\n`;
+  if (cursors.res_e) css += `.res-e { cursor: url('${cursors.res_e}') 12 12, e-resize !important; }\n`;
+  if (cursors.res_w) css += `.res-w { cursor: url('${cursors.res_w}') 12 12, w-resize !important; }\n`;
+  if (cursors.res_nw) css += `.res-nw { cursor: url('${cursors.res_nw}') 12 12, nw-resize !important; }\n`;
+  if (cursors.res_ne) css += `.res-ne { cursor: url('${cursors.res_ne}') 12 12, ne-resize !important; }\n`;
+  if (cursors.res_sw) css += `.res-sw { cursor: url('${cursors.res_sw}') 12 12, sw-resize !important; }\n`;
+  if (cursors.res_se) css += `.res-se { cursor: url('${cursors.res_se}') 12 12, se-resize !important; }\n`;
 
-  document.getElementById('custom-cursors-style').textContent = css;
+  const styleEl = document.getElementById('custom-cursors-style');
+  if (styleEl) styleEl.textContent = css;
 }
 
 window.addEventListener('focus', () => callPy('py_set_window_focus', true));
 window.addEventListener('blur', () => callPy('py_set_window_focus', false));
 
-msgsBox.addEventListener('wheel', (e) => {
-  if (e.deltaY < 0) isInitialLoadingLock = false;
-}, { passive: true });
-
-msgsBox.addEventListener('touchmove', () => {
-  isInitialLoadingLock = false;
-}, { passive: true });
+msgsBox.addEventListener('wheel', (e) => { if (e.deltaY < 0) isInitialLoadingLock = false; }, { passive: true });
+msgsBox.addEventListener('touchmove', () => { isInitialLoadingLock = false; }, { passive: true });
 
 window.addEventListener('pywebviewready', async () => {
   const state = await callPy('py_frontend_ready');
@@ -738,32 +693,17 @@ function sendMessage() {
 const dropOverlay = document.getElementById('dropOverlay');
 let dragCounter = 0;
 
-window.addEventListener('dragenter', (e) => {
-  e.preventDefault();
-  dragCounter++;
-  dropOverlay.classList.add('active');
-});
-
+window.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; dropOverlay.classList.add('active'); });
 window.addEventListener('dragleave', (e) => {
-  e.preventDefault();
-  dragCounter--;
-  if (dragCounter <= 0) {
-    dragCounter = 0;
-    dropOverlay.classList.remove('active');
-  }
+  e.preventDefault(); dragCounter--;
+  if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove('active'); }
 });
-
 window.addEventListener('dragover', (e) => e.preventDefault());
-
 window.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dragCounter = 0;
-  dropOverlay.classList.remove('active');
+  e.preventDefault(); dragCounter = 0; dropOverlay.classList.remove('active');
   const files = e.dataTransfer.files;
   if (files && files.length > 0) {
-    for (let i = 0; i < files.length; i++) {
-      uploadFile(files[i]);
-    }
+    for (let i = 0; i < files.length; i++) uploadFile(files[i]);
   }
 });
 
@@ -808,7 +748,6 @@ window.js_load_history = function(history) {
   pinToBottom();
   setTimeout(pinToBottom, 150);
   setTimeout(pinToBottom, 400);
-  setTimeout(pinToBottom, 1000);
   setTimeout(() => { isInitialLoadingLock = false; }, 3500);
 };
 
@@ -834,30 +773,23 @@ window.js_on_file_ready = function(fileId, filename, localPath, relUrl) {
     const fileCard = document.getElementById(`fcard-${fileId}`);
     if (fileCard) fileCard.innerHTML = renderDocCardContent(filename, localPath);
   }
-  
   if (isInitialLoadingLock || isUserNearBottom()) pinToBottom();
 };
 
 window.js_update_reactions = function(msgId, reactions) {
   const m = messagesMap.get(msgId);
   if (m) {
-    m.reactions = reactions;
-    const el = document.getElementById(`rx-${msgId}`);
-    if (el) renderReactionsHtml(el, msgId, reactions);
+    m.reactions = reactions || {};
+  }
+  const el = document.getElementById(`rx-${msgId}`);
+  if (el) {
+    renderReactionsHtml(el, msgId, reactions || {});
   }
 };
 
-window.js_on_link_preview_ready = function(url, meta) {
-  document.querySelectorAll(`.linkcard[data-url="${CSS.escape(url)}"]`).forEach(card => {
-    card.querySelector('.link-title').textContent = meta.title;
-    card.querySelector('.link-domain').textContent = meta.domain;
-    card.querySelector('.link-desc').textContent = meta.desc;
-  });
-  if (isInitialLoadingLock || isUserNearBottom()) pinToBottom();
-};
-
 function createMessageElement(m) {
-  const msgId = m.id || m.file_id;
+  const msgId = m.id || m.file_id || `temp_${Math.random().toString(36).slice(2, 9)}`;
+  m.id = msgId;
   messagesMap.set(msgId, m);
   m.reactions = m.reactions || {};
 
@@ -874,41 +806,40 @@ function createMessageElement(m) {
 
     urls.forEach(u => {
       safeText = safeText.replace(u, `<a href="javascript:void(0)" onclick="callPy('py_open_link', '${escapeJs(u)}')">${u}</a>`);
-      callPy('py_fetch_link_preview', u);
     });
 
     inner = `<span>${safeText}</span>`;
     urls.forEach(u => {
       inner += `
         <div class="linkcard" data-url="${escapeHtml(u)}" onclick="callPy('py_open_link', '${escapeJs(u)}')">
-          <span class="link-title">Загрузка информации...</span>
+          <span class="link-title">Ссылка</span>
           <span class="link-domain">${u}</span>
-          <span class="link-desc">...</span>
         </div>`;
     });
   } else if (m.action === 'file' || m.filename) {
     const fileId = m.file_id || msgId;
     const fileData = localReadyFiles.get(fileId);
-    const fn = m.filename.toLowerCase();
-    const isImg = /\.(jpg|jpeg|png|gif|webp|svg)$/.test(fn);
-    const isVid = /\.(mp4|webm|mov)$/.test(fn);
-    const isAud = /\.(mp3|wav|ogg)$/.test(fn);
+    const fn = (m.filename || '').toLowerCase();
+    const isMedia = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|mp3|wav|ogg)$/.test(fn);
 
-    if (isImg || isVid || isAud) {
+    if (isMedia) {
       inner += `<div class="tg-media" id="media-${fileId}">${fileData ? renderMediaElement(m.filename, fileData.relUrl, fileData.localPath) : '<div class="pbar-wrap" style="width:200px;height:4px;margin:8px 0"><div class="pbar-fill"></div></div>'}</div>`;
     } else {
       inner += `<div class="file-card" id="fcard-${fileId}">${renderDocCardContent(m.filename, fileData?.localPath)}</div>`;
     }
   }
 
+  // АКТУАЛЬНЫЕ ЗУМЕРСКИЕ РЕАКЦИИ
   wrap.innerHTML = `
     <div class="rx-hover-bar">
-      <button onclick="sendReaction('${msgId}', '❤️')">❤️</button>
-      <button onclick="sendReaction('${msgId}', '🔥')">🔥</button>
-      <button onclick="sendReaction('${msgId}', '😂')">😂</button>
-      <button onclick="sendReaction('${msgId}', '✨')">✨</button>
-      <button onclick="sendReaction('${msgId}', '👍')">👍</button>
-      <button onclick="sendReaction('${msgId}', '🚀')">🚀</button>
+      <button onclick="sendReaction('${msgId}', '💀')" title="Умер">💀</button>
+      <button onclick="sendReaction('${msgId}', '😭')" title="Рыдаю">😭</button>
+      <button onclick="sendReaction('${msgId}', '🤡')" title="Клоун">🤡</button>
+      <button onclick="sendReaction('${msgId}', '🗿')" title="Сигма">🗿</button>
+      <button onclick="sendReaction('${msgId}', '🔥')" title="Имба / База">🔥</button>
+      <button onclick="sendReaction('${msgId}', '💅')" title="Слэй">💅</button>
+      <button onclick="sendReaction('${msgId}', '🧢')" title="Кэп">🧢</button>
+      <button onclick="sendReaction('${msgId}', '⚡')" title="Вайб">⚡</button>
     </div>
     <div class="bubble">
       ${!isMe ? `<div class="sender-name">${escapeHtml(m.sender || 'Аноним')}</div>` : ''}
@@ -974,6 +905,7 @@ function renderReactionsHtml(container, msgId, reactions) {
 }
 
 function sendReaction(msgId, emoji) {
+  if (!msgId) return;
   callPy('py_toggle_reaction', msgId, emoji);
 }
 
@@ -982,9 +914,7 @@ function isUserNearBottom() {
 }
 
 function pinToBottom() {
-  requestAnimationFrame(() => { 
-    msgsBox.scrollTop = msgsBox.scrollHeight;
-  });
+  requestAnimationFrame(() => { msgsBox.scrollTop = msgsBox.scrollHeight; });
 }
 
 function onMediaLoaded() {
@@ -1004,24 +934,17 @@ function escapeJs(s) {
   return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-// Продвинутый Canvas: Цифровые волны и реагирующая сеть частиц
+// Canvas фон: Волны и неоновые частицы
 const cv = document.getElementById('bgfx'), cx = cv.getContext('2d');
 let W, H, parts = [], T = 0;
 let mouse = { x: -1000, y: -1000 };
 
-window.addEventListener('mousemove', (e) => {
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
-});
+window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
 
-function resize() { 
-  W = cv.width = innerWidth; 
-  H = cv.height = innerHeight; 
-}
+function resize() { W = cv.width = innerWidth; H = cv.height = innerHeight; }
 resize(); 
 window.addEventListener('resize', resize);
 
-// Генерация светлячков
 parts = [];
 for (let i = 0; i < 70; i++) {
   parts.push({
@@ -1038,7 +961,6 @@ function anim() {
   T += 0.01;
   cx.clearRect(0, 0, W, H);
 
-  // 1. Рисуем 3 многослойные биоморфные волны с градиентами
   for (let k = 0; k < 3; k++) {
     cx.beginPath();
     const base = H * (0.3 + k * 0.22);
@@ -1051,7 +973,6 @@ function anim() {
     }
     cx.lineTo(W, H);
     
-    // Элегантные световые градиенты для волн
     const grad = cx.createLinearGradient(0, base - 50, W, H);
     if (k === 0) {
       grad.addColorStop(0, 'rgba(0, 242, 254, 0.05)');
@@ -1072,7 +993,6 @@ function anim() {
     cx.stroke();
   }
 
-  // 2. Интерактивные частицы и связь между ними
   for (let i = 0; i < parts.length; i++) {
     let p = parts[i];
     p.y -= p.sp;
@@ -1082,9 +1002,7 @@ function anim() {
     if (p.x < -20) p.x = W + 20;
     if (p.x > W + 20) p.x = -20;
 
-    // Реакция на мышь
-    const dx = mouse.x - p.x;
-    const dy = mouse.y - p.y;
+    const dx = mouse.x - p.x, dy = mouse.y - p.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 120) {
       const force = (120 - dist) / 120;
@@ -1092,7 +1010,6 @@ function anim() {
       p.y -= (dy / dist) * force * 3;
     }
 
-    // Соединение ближайших точек легкими линиями-созвездиями
     for (let j = i + 1; j < parts.length; j++) {
       let p2 = parts[j];
       let pdist = Math.hypot(p.x - p2.x, p.y - p2.y);
@@ -1106,7 +1023,6 @@ function anim() {
       }
     }
 
-    // Рендер светящейся точки
     cx.beginPath();
     cx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
     cx.fillStyle = `rgba(0, 242, 254, ${p.alpha})`;
