@@ -823,9 +823,13 @@ function createMessageElement(m) {
     const isMedia = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|mp3|wav|ogg)$/.test(fn);
 
     if (isMedia) {
-      inner += `<div class="tg-media" id="media-${fileId}">${fileData ? renderMediaElement(m.filename, fileData.relUrl, fileData.localPath) : '<div class="pbar-wrap" style="width:200px;height:4px;margin:8px 0"><div class="pbar-fill"></div></div>'}</div>`;
+      inner += `<div class="tg-media" id="media-${fileId}">${
+        fileData && fileData.relUrl 
+          ? renderMediaElement(m.filename, fileData.relUrl, fileData.localPath) 
+          : '<div class="pbar-wrap" style="width:200px;height:4px;margin:8px 0"><div class="pbar-fill"></div></div>'
+      }</div>`;
     } else {
-      inner += `<div class="file-card" id="fcard-${fileId}">${renderDocCardContent(m.filename, fileData?.localPath)}</div>`;
+      inner += `<div class="file-card" id="fcard-${fileId}">${renderDocCardContent(m.filename, fileData ? fileData.localPath : null)}</div>`;
     }
   }
 

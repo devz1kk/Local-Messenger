@@ -31,6 +31,8 @@ from typing import Any
 import pystray
 from PIL import Image, ImageDraw
 import webview
+import mimetypes
+import traceback
 
 # =====================================================================
 # КОНФИГУРАЦИЯ И ПУТИ ФАЙЛОВОЙ СИСТЕМЫ
@@ -573,6 +575,8 @@ def toggle_local_reaction(msg_id: str, emoji: str, user_nickname: str) -> dict[s
 # =====================================================================
 # СЕТЕВОЙ КЛИЕНТ С ПОДДЕРЖКОЙ РЕАКЦИЙ
 # =====================================================================
+
+
 class NetworkWorker(threading.Thread):
     def __init__(self, nickname: str) -> None:
         super().__init__(name="NetworkWorker", daemon=True)
@@ -582,6 +586,8 @@ class NetworkWorker(threading.Thread):
         self.sock: socket.socket | None = None
         self._lock: threading.Lock = threading.Lock()
         self.last_known_server: tuple[str, int] | None = None
+
+    import traceback
 
     def run(self) -> None:
         while self.running:
@@ -607,7 +613,8 @@ class NetworkWorker(threading.Thread):
                     run_js("window.js_set_connection_status(true);")
                     self.send({"action": "register", "nickname": self.nickname})
                     self.send({"action": "get_history"})
-                except Exception:
+                except Exception as e:
+                    print(f"[NET] Не удалось подключиться к {host}:{port} -> {e}")
                     self.connected = False
                     self.last_known_server = None
                     if self.sock:
@@ -619,11 +626,27 @@ class NetworkWorker(threading.Thread):
                     time.sleep(2)
                     continue
 
+            # Приём пакетов
             try:
                 msg = self._recv_msg()
                 if msg is None:
-                    raise ConnectionResetError()
+                    raise ConnectionResetError("Сервер разорвал соединение.")
+            except Exception as e:
+                print(f"[NET] Ошибка сокета: {e}")
+                self.connected = False
+                run_js("window.js_set_connection_status(false);")
+                with self._lock:
+                    if self.sock:
+                        try:
+                            self.sock.close()
+                        except Exception:
+                            pass
+                        self.sock = None
+                time.sleep(2)
+                continue
 
+            # Обработка сообщения В ОТДЕЛЬНОМ TRY, чтобы ошибка UI не рвала сокет!
+            try:
                 match msg.get("action"):
                     case "file_download_response":
                         self._save_incoming_file(
@@ -675,20 +698,20 @@ class NetworkWorker(threading.Thread):
                                     m["reactions"] = reactions_map
                                     break
                             run_js(f"window.js_update_reactions('{target_id}', {json.dumps(reactions_map)});")
-                        elif msg.get("emoji") and msg.get("sender"):
-                            updated = toggle_local_reaction(target_id, msg["emoji"], msg["sender"])
-                            run_js(f"window.js_update_reactions('{target_id}', {json.dumps(updated)});")
-            except Exception:
-                self.connected = False
-                run_js("window.js_set_connection_status(false);")
-                with self._lock:
-                    if self.sock:
-                        try:
-                            self.sock.close()
-                        except Exception:
-                            pass
-                        self.sock = None
-                time.sleep(2)
+            except Exception as e:
+                # Если упало формирование картинки или JS — соединение НЕ РВЁТСЯ!
+                print(f"[UI ERROR] Сбой при обработке сообщения: {e}")
+                traceback.print_exc()      
+                
+    def get_file_data_url(self, filepath: Path) -> str:
+        """Генерирует Data URL для встраивания локального медиа в WebView."""
+        mime, _ = mimetypes.guess_type(filepath.name)
+        mime = mime or "application/octet-stream"
+        try:
+            b64 = base64.b64encode(filepath.read_bytes()).decode("utf-8")
+            return f"data:{mime};base64,{b64}"
+        except Exception:
+            return ""    
 
     def _auto_download_if_needed(self, file_id: str | None, filename: str | None) -> None:
         if not file_id or not filename:
@@ -697,20 +720,25 @@ class NetworkWorker(threading.Thread):
         if not local_path.exists():
             self.send({"action": "file_download", "file_id": file_id})
         else:
-            rel_url = f"downloads/{file_id}_{filename}"
             clean_path = str(local_path).replace("\\", "/")
-            run_js(f"window.js_on_file_ready('{file_id}', '{filename}', '{clean_path}', '{rel_url}');")
+            is_media = filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.mp4', '.webm', '.mov', '.mp3', '.wav', '.ogg'))
+            media_url = self.get_file_data_url(local_path) if is_media else ""
+            run_js(f"window.js_on_file_ready('{file_id}', '{filename}', '{clean_path}', '{media_url}');")
 
     def _save_incoming_file(self, file_id: str, filename: str, content_b64: str) -> None:
         try:
             local_path = DOWNLOADS_DIR / f"{file_id}_{filename}"
             with open(local_path, "wb") as f:
                 f.write(base64.b64decode(content_b64))
-            rel_url = f"downloads/{file_id}_{filename}"
             clean_path = str(local_path).replace("\\", "/")
-            run_js(f"window.js_on_file_ready('{file_id}', '{filename}', '{clean_path}', '{rel_url}');")
-        except Exception:
-            pass
+            is_media = filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.mp4', '.webm', '.mov', '.mp3', '.wav', '.ogg'))
+            
+            mime, _ = mimetypes.guess_type(filename)
+            media_url = f"data:{mime or 'image/png'};base64,{content_b64}" if is_media else ""
+
+            run_js(f"window.js_on_file_ready('{file_id}', '{filename}', '{clean_path}', '{media_url}');")
+        except Exception as e:
+            print(f"[FILE SAVE ERROR] {e}")
 
     def send(self, data_dict: dict[str, Any]) -> bool:
         if not self.connected or not self.sock:
@@ -918,6 +946,14 @@ class JsApi:
         if not filename or not content_b64:
             return
         file_id = f"file_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+        
+        # Сразу сохраняем локально:
+        try:
+            with open(DOWNLOADS_DIR / f"{file_id}_{filename}", "wb") as f:
+                f.write(base64.b64decode(content_b64))
+        except Exception:
+            pass
+
         worker.send({
             "action": "file_upload",
             "id": file_id,
